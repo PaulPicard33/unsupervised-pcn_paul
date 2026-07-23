@@ -1,0 +1,46 @@
+2026-06-25 10:47:56,441 INFO    MainThread:23556 [wandb_setup.py:_flush():68] Current SDK version is 0.19.6
+2026-06-25 10:47:56,441 INFO    MainThread:23556 [wandb_setup.py:_flush():68] Configure stats pid to 23556
+2026-06-25 10:47:56,441 INFO    MainThread:23556 [wandb_setup.py:_flush():68] Loading settings from C:\Users\33673\.config\wandb\settings
+2026-06-25 10:47:56,441 INFO    MainThread:23556 [wandb_setup.py:_flush():68] Loading settings from c:\Users\33673\Desktop\unsupervised-pcn\notebooks\wandb\settings
+2026-06-25 10:47:56,441 INFO    MainThread:23556 [wandb_setup.py:_flush():68] Loading settings from environment variables
+2026-06-25 10:47:56,443 INFO    MainThread:23556 [wandb_init.py:setup_run_log_directory():637] Logging user logs to c:\Users\33673\Desktop\unsupervised-pcn\notebooks\wandb\run-20260625_104756-a1e62n4q\logs\debug.log
+2026-06-25 10:47:56,443 INFO    MainThread:23556 [wandb_init.py:setup_run_log_directory():638] Logging internal logs to c:\Users\33673\Desktop\unsupervised-pcn\notebooks\wandb\run-20260625_104756-a1e62n4q\logs\debug-internal.log
+2026-06-25 10:47:56,443 INFO    MainThread:23556 [wandb_init.py:monkeypatch_ipython():589] configuring jupyter hooks <wandb.sdk.wandb_init._WandbInit object at 0x0000028A295E3690>
+2026-06-25 10:47:56,443 INFO    MainThread:23556 [wandb_init.py:init():756] calling init triggers
+2026-06-25 10:47:56,443 INFO    MainThread:23556 [wandb_init.py:init():761] wandb.init called with sweep_config: {}
+config: {'seed': 0, 'n_epochs': 200, 'log': False, 'gamma': 0.99, 'dataset': 'mnist', 'train_size': None, 'test_size': None, 'normalize': True, 'batch_size': 64, 'n_classes': None, 'scheduler': False, 'optim': 'Adam', 'lr': 0.0001, 'batch_scale': True, 'grad_clip': None, 'weight_decay': None, 'mu_dt': 0.01, 'n_train_iters': 50, 'n_test_iters': 200, 'n_max_iters': 10000, 'init_std': 0.01, 'fixed_preds_train': False, 'fixed_preds_test': False, 'use_bias': True, 'kaiming_init': False, 'n_vc': 100, 'act_fn': 'tanh', 'n_ec': 30, '_wandb': {}}
+2026-06-25 10:47:56,443 INFO    MainThread:23556 [wandb_init.py:init():789] starting backend
+2026-06-25 10:47:57,543 INFO    MainThread:23556 [wandb_init.py:init():793] sending inform_init request
+2026-06-25 10:47:57,668 INFO    MainThread:23556 [backend.py:_multiprocessing_setup():97] multiprocessing start_methods=spawn, using: spawn
+2026-06-25 10:47:57,670 INFO    MainThread:23556 [wandb_init.py:init():808] backend started and connected
+2026-06-25 10:47:57,681 INFO    MainThread:23556 [wandb_run.py:_label_probe_notebook():1196] probe notebook
+2026-06-25 10:47:57,682 INFO    MainThread:23556 [wandb_init.py:init():901] updated telemetry
+2026-06-25 10:47:57,797 INFO    MainThread:23556 [wandb_init.py:init():936] communicating run to backend with 90.0 second timeout
+2026-06-25 10:47:58,172 ERROR   MainThread:23556 [wandb_init.py:init():1481] error in wandb.init()
+Traceback (most recent call last):
+  File "c:\Users\33673\anaconda3\envs\summer_pcn\Lib\site-packages\wandb\sdk\wandb_init.py", line 1471, in init
+    return wi.init(run_settings, run_config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\33673\anaconda3\envs\summer_pcn\Lib\site-packages\wandb\sdk\wandb_init.py", line 967, in init
+    raise error
+wandb.errors.errors.CommError: failed to upsert bucket: returned error 401 Unauthorized: {"errors":[{"message":"user is not logged in","path":["upsertBucket"],"extensions":{"code":"PERMISSION_ERROR"}}],"data":{"upsertBucket":null}}
+2026-06-25 10:51:40,488 INFO    MainThread:23556 [wandb_init.py:setup_run_log_directory():637] Logging user logs to c:\Users\33673\Desktop\unsupervised-pcn\notebooks\wandb\run-20260625_105140-m2b1fme1\logs\debug.log
+2026-06-25 10:51:40,488 INFO    MainThread:23556 [wandb_init.py:setup_run_log_directory():638] Logging internal logs to c:\Users\33673\Desktop\unsupervised-pcn\notebooks\wandb\run-20260625_105140-m2b1fme1\logs\debug-internal.log
+2026-06-25 10:51:40,488 INFO    MainThread:23556 [wandb_init.py:init():756] calling init triggers
+2026-06-25 10:51:40,488 INFO    MainThread:23556 [wandb_init.py:init():761] wandb.init called with sweep_config: {}
+config: {'seed': 0, 'n_epochs': 200, 'log': False, 'gamma': 0.99, 'dataset': 'mnist', 'train_size': None, 'test_size': None, 'normalize': True, 'batch_size': 64, 'n_classes': None, 'scheduler': False, 'optim': 'Adam', 'lr': 0.0001, 'batch_scale': True, 'grad_clip': None, 'weight_decay': None, 'mu_dt': 0.01, 'n_train_iters': 50, 'n_test_iters': 200, 'n_max_iters': 10000, 'init_std': 0.01, 'fixed_preds_train': False, 'fixed_preds_test': False, 'use_bias': True, 'kaiming_init': False, 'n_vc': 100, 'act_fn': 'tanh', 'n_ec': 30, '_wandb': {}}
+2026-06-25 10:51:40,488 INFO    MainThread:23556 [wandb_init.py:init():789] starting backend
+2026-06-25 10:51:40,488 INFO    MainThread:23556 [wandb_init.py:init():793] sending inform_init request
+2026-06-25 10:51:40,513 INFO    MainThread:23556 [backend.py:_multiprocessing_setup():97] multiprocessing start_methods=spawn, using: spawn
+2026-06-25 10:51:40,517 INFO    MainThread:23556 [wandb_init.py:init():808] backend started and connected
+2026-06-25 10:51:40,530 INFO    MainThread:23556 [wandb_run.py:_label_probe_notebook():1196] probe notebook
+2026-06-25 10:51:40,533 INFO    MainThread:23556 [wandb_init.py:init():901] updated telemetry
+2026-06-25 10:51:40,688 INFO    MainThread:23556 [wandb_init.py:init():936] communicating run to backend with 90.0 second timeout
+2026-06-25 10:51:41,081 ERROR   MainThread:23556 [wandb_init.py:init():1481] error in wandb.init()
+Traceback (most recent call last):
+  File "c:\Users\33673\anaconda3\envs\summer_pcn\Lib\site-packages\wandb\sdk\wandb_init.py", line 1471, in init
+    return wi.init(run_settings, run_config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\33673\anaconda3\envs\summer_pcn\Lib\site-packages\wandb\sdk\wandb_init.py", line 967, in init
+    raise error
+wandb.errors.errors.CommError: failed to upsert bucket: returned error 401 Unauthorized: {"errors":[{"message":"user is not logged in","path":["upsertBucket"],"extensions":{"code":"PERMISSION_ERROR"}}],"data":{"upsertBucket":null}}

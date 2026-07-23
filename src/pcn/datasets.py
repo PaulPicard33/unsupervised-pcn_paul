@@ -1,5 +1,8 @@
 from torch.utils import data
 from torchvision import datasets, transforms
+import torchvision
+import torchvision.transforms as transforms
+from torch.utils.data import Subset, random_split, DataLoader
 
 from pcn import utils
 import numpy as np
@@ -114,3 +117,36 @@ def _get_transform(normalize=True, mean=(0.5), std=(0.5)):
 
 def _to_vector(data):
     return data.flatten()
+
+def get_fmnist_dataloaders(batch_size=1024, subset_size=None):
+    """
+    Charge le dataset Fashion-MNIST. 
+    subset_size permet de réduire drastiquement la taille pour les tests locaux.
+    """
+    # Ajout de 2 pixels de bordure pour obtenir du 32x32
+    transform_fmnist_padded = transforms.Compose([
+        transforms.Pad(2), 
+        transforms.ToTensor(), 
+        transforms.Normalize((0.5,), (0.5,))
+    ])
+
+    fmnist_full = torchvision.datasets.FashionMNIST(
+        root='./data', train=True, download=True, transform=transform_fmnist_padded
+    ) #
+
+    # Réduction du dataset pour les tests locaux
+    if subset_size is not None:
+        fmnist_full = Subset(fmnist_full, range(subset_size))
+        train_size = int(0.8 * len(fmnist_full))
+        val_size = len(fmnist_full) - train_size
+    else:
+        # Séparation standard (50k train / 10k val)[cite: 1]
+        train_size = 50000
+        val_size = 10000
+
+    fmnist_train, fmnist_val = random_split(fmnist_full, [train_size, val_size]) #[cite: 1]
+
+    train_loader = DataLoader(fmnist_train, batch_size=batch_size, shuffle=True) #[cite: 1]
+    val_loader = DataLoader(fmnist_val, batch_size=batch_size, shuffle=False) #[cite: 1]
+
+    return {"train": train_loader, "val": val_loader, "input_dim": 1024, "shape": (1, 32, 32)}

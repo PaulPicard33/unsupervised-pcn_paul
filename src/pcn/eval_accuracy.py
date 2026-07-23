@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     # inference params
     cf.mu_dt = 0.01
-    cf.n_max_iters = 10000
+    cf.n_max_iters = 100
     cf.step_tolerance = 1e-5
     cf.init_std = 0.01
     cf.fixed_preds_train = False

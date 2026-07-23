@@ -4,6 +4,7 @@ import torch
 from torch import nn
 import numpy as np
 import wandb
+import torch.optim as optim
 
 class PCModel(nn.Module):
     def __init__(self, nodes, mu_dt, act_fn, use_bias=False, kaiming_init=False, positive=False, device=utils.DEVICE):
@@ -304,11 +305,240 @@ class PCModel(nn.Module):
     def get_errors(self, n): # losses 
         return torch.sum(self.errs[n] ** 2, dim=1).cpu()
     
+
+
+
+class bPCModel(nn.Module):
+    def __init__(self, nodes, mu_dt, act_fn, use_bias=False, kaiming_init=False, positive=False, device=utils.DEVICE,alpha_up=0,alpha_down=1.0):
+        super().__init__()
+        self.nodes = nodes
+        self.mu_dt = mu_dt
+        self.act_fn = act_fn
+        self.n_nodes = len(nodes)
+        self.n_layers = len(nodes) - 1
+        self.device = device
+        self.alpha_up= alpha_up
+        self.alpha_down = alpha_down
+        
+        if not positive:
+            self.uplayers = []
+            self.downlayers = []
+            for l in range(self.n_layers):
+                _act_fn = utils.Linear() if (l == self.n_layers - 1) else self.act_func(self.act_fn)
+                _use_bias = False if (l == self.n_layers - 1) else use_bias
+
+                uplayer = FCLayer(
+                    in_size=nodes[l],
+                    out_size=nodes[l + 1],
+                    act_fn=_act_fn,
+                    use_bias=_use_bias,
+                    kaiming_init=kaiming_init,
+                    device=device
+                )
+                downlayer = FCLayer(
+                    in_size=nodes[l+1],
+                    out_size=nodes[l],
+                    act_fn=_act_fn,
+                    use_bias=_use_bias,
+                    kaiming_init=kaiming_init,
+                    device=device
+                )
+                self.uplayers.append(uplayer)
+                self.downlayers.append(downlayer)
+        else:
+            self.uplayers = [
+                FCPlusLayer(
+                    in_size=nodes[l],
+                    out_size=nodes[l + 1],
+                    act_fn=self.act_func(self.act_fn),
+                    use_bias=use_bias,
+                    kaiming_init=kaiming_init,
+                    device=device
+                )
+                for l in range(self.n_layers)
+            ]
+            self.downlayers = [FCPlusLayer(
+                    in_size=nodes[l+1],
+                    out_size=nodes[l],
+                    act_fn=self.act_func(self.act_fn),
+                    use_bias=use_bias,
+                    kaiming_init=kaiming_init,
+                    device=device
+                )
+                for l in range(self.n_layers)
+            ]
+        self.uplayers = nn.ModuleList(self.uplayers)
+        self.downlayers = nn.ModuleList(self.downlayers)
+    def reset(self):
+        # Séparation des buffers pour les deux directions
+        self.preds_up = [[] for _ in range(self.n_nodes)]
+        self.preds_down = [[] for _ in range(self.n_nodes)]
+        self.errs_up = [[] for _ in range(self.n_nodes)]
+        self.errs_down = [[] for _ in range(self.n_nodes)]
+        self.mus = [[] for _ in range(self.n_nodes)]
+    def act_func(self, act_fn):
+        if act_fn == 'sigmoid':
+            return utils.Sigmoid()
+        elif act_fn == 'tanh':
+            return utils.Tanh()
+        elif act_fn == 'relu':
+            return utils.ReLU()
+        elif act_fn == 'linear':
+            return utils.Linear()
+        else:
+            raise ValueError(f'Unsupported activation function: {act_fn}')
+    def reset_mus(self, batch_size, init_std):
+        for l in range(self.n_layers):
+            self.mus[l] = utils.set_tensor(
+                torch.empty(batch_size, self.layers[l].in_size).normal_(mean=0, std=init_std), self.device
+            )
+
+    def compute_preds_and_errs(self, fixed_preds=False):
+        # Flux "Up" (ex: Label vers Image dans l'indexation)
+        for l in range(self.n_layers):
+            if not fixed_preds or len(self.preds_up[l+1]) == 0:
+                self.preds_up[l+1] = self.uplayers[l].forward(self.mus[l])
+            # Multiplié par alpha_up selon l'équation d'énergie du papier
+            self.errs_up[l+1] = self.alpha_up * (self.mus[l+1] - self.preds_up[l+1])
+            
+        # Flux "Down" (ex: Image vers Label)
+        for l in range(self.n_layers):
+            if not fixed_preds or len(self.preds_down[l]) == 0:
+                self.preds_down[l] = self.downlayers[l].forward(self.mus[l+1])
+            # Multiplié par alpha_down
+            self.errs_down[l] = self.alpha_down * (self.mus[l] - self.preds_down[l])
+    def updates(self, n_iters, clamped_nodes):
+        """
+        clamped_nodes : liste des indices des couches figées. 
+        Ex: [0] pour l'image (classification), [-1] pour le label (génération), [0, -1] (entraînement)
+        """
+        with torch.no_grad():
+            self.compute_preds_and_errs() # Calcul initial
+
+            for itr in range(n_iters):
+                for l in range(self.n_nodes):
+                    
+                    # --- L'astuce est ici : on saute la mise à jour si le noeud est figé ---
+                    # On gère les indices négatifs (ex: -1 pour la dernière couche)
+                    actual_l = l if l not in clamped_nodes and (l - self.n_nodes) not in clamped_nodes else None
+                    if actual_l is None:
+                        continue 
+
+                    # Initialisation de la force (delta) qui va bouger l'activité du noeud l
+                    delta = utils.set_tensor(torch.zeros_like(self.mus[l]), self.device)
+                    
+                    # --- 1. Forces directes (Le noeud l est la CIBLE des prédictions) ---
+                    if l < self.n_nodes - 1:
+                        # L'erreur venant d'en haut tire le noeud vers le haut
+                        delta -= self.errs_down[l] 
+                    if l > 0:
+                        # L'erreur venant d'en bas tire le noeud vers le bas
+                        delta -= self.errs_up[l]
+                    
+                    # --- 2. Forces de rétroaction (Le noeud l est la SOURCE des prédictions) ---
+                    if l > 0:
+                        # Rétroaction de l'erreur causée à la couche l-1
+                        delta += self.downlayers[l-1].backward(self.errs_down[l-1])
+                    if l < self.n_nodes - 1:
+                        # Rétroaction de l'erreur causée à la couche l+1
+                        delta += self.uplayers[l].backward(self.errs_up[l+1])
+
+                    # Application du gradient (Descente d'énergie)
+                    self.mus[l] = self.mus[l] + self.mu_dt * delta
+
+                # Recalcul des erreurs avec les nouvelles activités
+                self.compute_preds_and_errs()
+    def update_grads(self):
+        # Mise à jour purement locale
+        for l in range(self.n_layers):
+            # Le gradient pour uplayers[l] dépend de l'erreur post-synaptique générée en l+1
+            self.uplayers[l].update_gradient(self.errs_up[l+1])
+            
+            # Le gradient pour downlayers[l] dépend de l'erreur post-synaptique générée en l
+            self.downlayers[l].update_gradient(self.errs_down[l])
+            
+    def train_step(self, img_batch, label_batch, n_iters, clamped_nodes):
+        """
+        Effectue une seule itération d'inférence + mise à jour des poids pour un batch.
+        """
+        self.reset_mus(batch_size=img_batch.size(0), init_std=0.1)
+        self.mus[0] = img_batch
+        self.mus[-1] = label_batch
+        
+        # Inférence : on minimise l'énergie
+        self.updates(n_iters, clamped_nodes=clamped_nodes)
+        
+        # Apprentissage : mise à jour des gradients
+        self.update_grads()
+        
+        # Retourne les erreurs pour le logging (optionnel)
+        return self.get_errors() 
+
+    def get_errors(self):
+        # Somme des erreurs pour le suivi
+        return {n: torch.sum(self.errs[n] ** 2, dim=1).mean().item() for n in range(self.n_nodes)}
+    
+class bPCTrainer:
+    def __init__(self, model, optimizer):
+        self.model = model
+        self.optimizer = optimizer
+    
+    def train_epoch(self, data_loader, n_iters, clamped_nodes=[0, -1]):
+        self.model.train() # Mode entraînement
+        epoch_errors = []
+        
+        for batch_id, (img_batch, label_batch) in enumerate(data_loader):
+            # 1. Le Trainer appelle le Moteur pour faire le travail sur le batch
+            batch_errors = self.model.train_step(img_batch, label_batch, n_iters, clamped_nodes)
+            
+            # 2. Le Trainer gère l'optimisation
+            self.optimizer.step()
+            self.optimizer.zero_grad()
+            
+            # 3. Le Trainer gère le logging (WandB, console, etc.)
+            epoch_errors.append(batch_errors)
+            if batch_id % 100 == 0:
+                print(f"Batch {batch_id}: {batch_errors}")
+                
+        return epoch_errors
+
+    def infer_classification(self, img_batch, n_iters):
+        """
+        Mode Classification : On donne l'image, on laisse le label fluctuer.
+        """
+        self.model.eval() # Mode évaluation
+        self.model.reset_mus(batch_size=img_batch.size(0), init_std=0.1)
+        self.model.mus[0] = img_batch
+        # On initialise le label avec du bruit
+        self.model.mus[-1] = torch.randn_like(self.model.mus[-1])
+        
+        # On ne bloque QUE l'image
+        self.model.updates(n_iters, clamped_nodes=[0])
+        return self.model.mus[-1] # Retourne la prédiction du label
+
+    def infer_reconstruction(self, label_batch, n_iters):
+        """
+        Mode Génération : On donne le label, on laisse l'image fluctuer.
+        """
+        self.model.eval()
+        self.model.reset_mus(batch_size=label_batch.size(0), init_std=0.1)
+        self.model.mus[-1] = label_batch
+        # On initialise l'image avec du bruit
+        self.model.mus[0] = torch.randn_like(self.model.mus[0])
+        
+        # On ne bloque QUE le label
+        self.model.updates(n_iters, clamped_nodes=[-1])
+        return self.model.mus[0] # Retourne l'image générée
+
+
+
+
+
 class PCTrainer(object):
     def __init__(self, model, optimizer=None):
         self.model = model
         self.optimizer = optimizer
-    
+
     def train(self, data_loader, epoch, n_iters, fixed_preds, log=True, log_freq=1000):
         """
         Return errors (losses weighted by the inverse of the number of nodes) in all layers averaged over the 
@@ -327,7 +557,7 @@ class PCTrainer(object):
                 batch_size=img_batch.size(0),
                 log=log and t%log_freq == 0,
             )
-           
+        
             # gather data for the current batch
             for n in range(self.model.n_nodes):
                 errors = self.model.get_errors(n)/self.model.nodes[n]
@@ -373,3 +603,98 @@ class PCTrainer(object):
         test_mse = test_mse/(n_batches*batch_size)
 
         return float(test_mse)
+
+
+class VGG5_bPC_Paper(nn.Module):
+    def __init__(self, num_labels=10, rep_neurons=256, alpha_gen=1e-4, alpha_disc=1.0):
+        super().__init__()
+        self.L = 6
+        self.alpha_gen = alpha_gen #[cite: 1]
+        self.alpha_disc = alpha_disc #[cite: 1]
+        self.latent_dim = num_labels + rep_neurons #[cite: 1]
+        self.num_labels = num_labels #[cite: 1]
+        
+        self.activation = nn.LeakyReLU() #[cite: 1]
+
+        # Voie Discriminative (V)[cite: 1]
+        self.V_convs = nn.ModuleList([
+            nn.Sequential(nn.Conv2d(1, 128, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
+            nn.Sequential(nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
+            nn.Sequential(nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
+            nn.Sequential(nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2))
+        ]) #[cite: 1]
+        self.V_linear = nn.Sequential(nn.Flatten(), nn.Linear(2048, self.latent_dim), nn.Identity()) #[cite: 1]
+
+        # Voie Générative (W)[cite: 1]
+        self.W_linear = nn.Sequential(nn.Linear(self.latent_dim, 2048), nn.Unflatten(1, (512, 2, 2))) #[cite: 1]
+        self.W_convs = nn.ModuleList([
+            nn.ConvTranspose2d(512, 512, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.ConvTranspose2d(512, 256, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.ConvTranspose2d(256, 128, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.Sequential(nn.ConvTranspose2d(128, 1, kernel_size=3, stride=2, padding=1, output_padding=1), nn.Tanh())
+        ]) #[cite: 1]
+
+        # Pondération des énergies[cite: 1]
+        alpha_disc_L = torch.ones(self.latent_dim) * alpha_disc #[cite: 1]
+        alpha_disc_L[num_labels:] = alpha_gen #[cite: 1]
+        self.register_buffer('alpha_disc_L', alpha_disc_L) #[cite: 1]
+
+    def _forward_V(self, x, layer_idx):
+        if layer_idx < 4: return self.V_convs[layer_idx](self.activation(x)) #[cite: 1]
+        return self.V_linear(self.activation(x)) #[cite: 1]
+
+    def _forward_W(self, x, layer_idx):
+        if layer_idx == 4: return self.W_linear(self.activation(x)) #[cite: 1]
+        return self.W_convs[3 - layer_idx](self.activation(x)) #[cite: 1]
+
+    def compute_energy(self, x):
+        energy_gen = 0.0
+        energy_disc = 0.0
+        
+        for i in range(self.L - 1):
+            pred_gen = self._forward_W(x[i+1], i) #[cite: 1]
+            energy_gen += torch.sum((x[i] - pred_gen) ** 2) * (self.alpha_gen / 2) #[cite: 1]
+            
+            pred_disc = self._forward_V(x[i], i) #[cite: 1]
+            diff_sq_disc = (x[i+1] - pred_disc) ** 2 #[cite: 1]
+            
+            if i == self.L - 2:
+                energy_disc += torch.sum(diff_sq_disc * self.alpha_disc_L) / 2 #[cite: 1]
+            else:
+                energy_disc += torch.sum(diff_sq_disc) * (self.alpha_disc / 2) #[cite: 1]
+                
+        return energy_gen + energy_disc
+
+    def bottom_up_sweep(self, x1):
+        x = [x1.clone()] #[cite: 1]
+        with torch.no_grad():
+            for i in range(self.L - 1):
+                x.append(self._forward_V(x[-1], i)) #[cite: 1]
+        return x
+
+    def infer(self, x_init, clamped_indices, steps=32, lr_x=0.01, partial_clamp=None, activity_decay=0.0):
+        x = [tensor.clone() for tensor in x_init] #[cite: 1]
+        free_params = []
+        for i in range(self.L):
+            if i not in clamped_indices:
+                x[i].requires_grad = True #[cite: 1]
+                free_params.append(x[i]) #[cite: 1]
+                
+        if len(free_params) > 0:
+            optimizer_x = optim.SGD(free_params, lr=lr_x, momentum=0.0) #[cite: 1]
+            for _ in range(steps):
+                optimizer_x.zero_grad() #[cite: 1]
+                energy = self.compute_energy(x) #[cite: 1]
+                energy.backward() #[cite: 1]
+                
+                if activity_decay > 0.0 and x[-1].requires_grad:
+                    x[-1].grad.data[:, self.num_labels:] += activity_decay * x[-1].data[:, self.num_labels:] #[cite: 1]
+                
+                if partial_clamp is not None:
+                    layer_idx, mask = partial_clamp #[cite: 1]
+                    if x[layer_idx].requires_grad:
+                        x[layer_idx].grad.data *= (1.0 - mask) #[cite: 1]
+                        
+                optimizer_x.step() #[cite: 1]
+                
+        return [tensor.detach() for tensor in x] #[cite: 1]
