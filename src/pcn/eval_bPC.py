@@ -130,7 +130,7 @@ def plot_tsne_layers(model, dataloader, device):
     plt.savefig("results/tsne_layers.png") #[cite: 6]
     wandb.log({"eval/tsne_layers": wandb.Image(fig, caption="Espace Latent (t-SNE) par couche")}) #[cite: 6]
     print("Tracés t-SNE envoyés sur W&B !") #[cite: 6]
-    plt.close(fig) #[cite: 6]
+    plt.close(fig) #[cite: 6]ef
 
 def main(cf):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
