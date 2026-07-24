@@ -6,8 +6,8 @@ import argparse
 import numpy as np
 from sklearn.manifold import TSNE
 
-from model import VGG5_bPC_Paper
-from dataset import get_fmnist_dataloaders
+from models import VGG5_bPC_Paper
+from datasets import get_fmnist_dataloaders
 
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
@@ -42,8 +42,7 @@ def evaluate_discrimination(model, dataloader, device, cf):
         total += batch_size
         
     accuracy = 100 * correct / total
-    print(f"Précision (Accuracy) sur le set de validation : {accuracy:.2f}%
-")
+    print(f"Précision (Accuracy) sur le set de validation : {accuracy:.2f}%")
     return accuracy
 
 def evaluate_generation(model, device, cf):
@@ -95,8 +94,7 @@ def evaluate_generation(model, device, cf):
         axes[i].axis('off')
     plt.tight_layout()
     plt.savefig("results/generated_images.png")
-    print("Images générées avec succès et sauvegardées dans 'results/generated_images.png'
-")
+    print("Images générées avec succès et sauvegardées dans 'results/generated_images.png' ")
 
 def plot_tsne_layers(model, dataloader, device):
     model.eval()
@@ -137,13 +135,11 @@ def plot_tsne_layers(model, dataloader, device):
     os.makedirs("results", exist_ok=True)
     plt.tight_layout()
     plt.savefig("results/tsne_layers.png")
-    print("Tracés t-SNE sauvegardés dans 'results/tsne_layers.png'
-")
+    print("Tracés t-SNE sauvegardés dans 'results/tsne_layers.png' ")
 
 def main(cf):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Évaluation sur : {device}
-")
+    print(f"Évaluation sur : {device} ")
 
     # Chargement des données (on utilise un subset_size pour la t-SNE si besoin)
     datasets = get_fmnist_dataloaders(batch_size=cf.batch_size, subset_size=cf.subset_size)
@@ -160,11 +156,9 @@ def main(cf):
     # Chargement des poids si fournis
     if cf.model_path and os.path.exists(cf.model_path):
         bpc_model.load_state_dict(torch.load(cf.model_path, map_location=device))
-        print(f"Poids du modèle chargés depuis {cf.model_path}
-")
+        print(f"Poids du modèle chargés depuis {cf.model_path}")
     else:
-        print("ATTENTION: Aucun chemin de modèle fourni ou fichier introuvable. Évaluation avec des poids aléatoires !
-")
+        print("ATTENTION: Aucun chemin de modèle fourni ou fichier introuvable. Évaluation avec des poids aléatoires !")
 
     # 1. Évaluation de la Discrimination
     evaluate_discrimination(bpc_model, val_loader, device, cf)
