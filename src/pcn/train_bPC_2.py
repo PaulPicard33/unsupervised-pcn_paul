@@ -17,7 +17,7 @@ def main(cf):
     model_name = f"{cf.dataset}"
     if cf.subset_size is not None:
         model_name += f"-subset_size={cf.subset_size}"
-    model_name += f"-latent={cf.rep_neurons}-lr={cf.lr}-steps={cf.infer_steps}"
+    model_name += f"-latent={cf.rep_neurons}-lr={cf.lr}-steps={cf.infer_steps}-epochs={cf.n_epochs}"
 
     # --- INITIALISATION WANDB ---
     os.environ["WANDB__SERVICE_WAIT"] = "300"
