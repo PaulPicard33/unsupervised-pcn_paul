@@ -62,6 +62,7 @@ echo "========================================="
 echo "Début du job sur le noeud : $SLURM_NODELIST"
 echo "Date de début : $(date)"
 echo "========================================="
+export WANDB_API_KEY="wandb_v1_0yXYtXk10E9m3IrQtLWnMqwFk1R"
 
 # Explication : Exécution du script d'entraînement. 
 # L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.
