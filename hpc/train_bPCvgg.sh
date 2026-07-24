@@ -62,10 +62,11 @@ echo "========================================="
 echo "Début du job sur le noeud : $SLURM_NODELIST"
 echo "Date de début : $(date)"
 echo "========================================="
-
+# Authentification silencieuse pour WandB
+export WANDB_API_KEY="TA_CLE_API_ICI"
 # Explication : Exécution du script d'entraînement. 
 # L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.
-python src/pcn/train_bPC.py 
+python src/pcn/train_bPC_2.py 
 
 # Explication : Trace de fin pour confirmer que le job ne s'est pas coupé en plein milieu.
 echo "========================================="
