@@ -3,8 +3,8 @@ import torch.optim as optim
 import wandb
 import os
 import argparse
-from model import VGG5_bPC_Paper
-from dataset import get_fmnist_dataloaders
+from models import VGG5_bPC_Paper
+from datasets import get_fmnist_dataloaders
 import torch.nn.functional as F
 
 class AttrDict(dict):
