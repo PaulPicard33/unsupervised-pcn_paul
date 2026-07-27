@@ -606,7 +606,7 @@ class PCTrainer(object):
 
 
 class VGG5_bPC_Paper(nn.Module):
-    def __init__(self, num_labels=10, rep_neurons=256, alpha_gen=1e-4, alpha_disc=1.0):
+    def __init__(self, num_labels=10, rep_neurons=256, alpha_gen=1e-4, alpha_disc=1.0,cifar=False):
         super().__init__()
         self.L = 6
         self.alpha_gen = alpha_gen #[cite: 1]
@@ -618,7 +618,7 @@ class VGG5_bPC_Paper(nn.Module):
 
         # Voie Discriminative (V)[cite: 1]
         self.V_convs = nn.ModuleList([
-            nn.Sequential(nn.Conv2d(1, 128, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
+            nn.Sequential(nn.Conv2d(3 if cifar else 1, 128, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
             nn.Sequential(nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
             nn.Sequential(nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
             nn.Sequential(nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2))
