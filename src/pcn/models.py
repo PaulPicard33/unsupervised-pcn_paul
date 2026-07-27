@@ -606,7 +606,7 @@ class PCTrainer(object):
 
 
 class VGG5_bPC_Paper(nn.Module):
-    def __init__(self, num_labels=10, rep_neurons=256, alpha_gen=1e-4, alpha_disc=1.0,cifar=False):
+    def __init__(self, num_labels=10, rep_neurons=256, alpha_gen=1e-4, alpha_disc=1.0,cifar=True):
         super().__init__()
         self.L = 6
         self.alpha_gen = alpha_gen #[cite: 1]
