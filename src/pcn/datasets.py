@@ -157,7 +157,7 @@ def get_CIFAR10_dataloaders(batch_size=1024, subset_size=None):
     """
     
     fmnist_full = torchvision.datasets.CIFAR10(
-        root='./data/cifar10', train=True, download=True,transform=transforms.Compose([
+        root='../data_saved/cifar10', train=True, download=True,transform=transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # Normalisation standard pour CIFAR-10
     ])
