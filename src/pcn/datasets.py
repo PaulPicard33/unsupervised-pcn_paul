@@ -131,7 +131,7 @@ def get_fmnist_dataloaders(batch_size=1024, subset_size=None):
     ])
 
     fmnist_full = torchvision.datasets.FashionMNIST(
-        root='./data', train=True, download=True, transform=transform_fmnist_padded
+        root='./data/fmnist', train=True, download=True, transform=transform_fmnist_padded
     ) #
 
     # Réduction du dataset pour les tests locaux
@@ -157,7 +157,7 @@ def get_CIFAR10_dataloaders(batch_size=1024, subset_size=None):
     """
     
     fmnist_full = torchvision.datasets.CIFAR10(
-        root='./data', train=True, download=True 
+        root='./data/CIFAR10', train=True, download=True 
     ) #
 
     # Réduction du dataset pour les tests locaux

@@ -7,6 +7,7 @@ from models import VGG5_bPC_Paper
 from datasets import get_fmnist_dataloaders,get_CIFAR10_dataloaders
 import torch.nn.functional as F
 
+
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
@@ -117,13 +118,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Script d'entraînement du modèle bPC")
     
     # --- ARGUMENTS LIGNE DE COMMANDE ---
-    parser.add_argument("--dataset", choices=['fmnist','CIFAR10'], default='fmnist', help="Nom du dataset")
+    parser.add_argument("--dataset", choices=['fmnist','CIFAR10'], default='CIFAR10', help="Nom du dataset")
     parser.add_argument("--subset_size", type=int, default=None, help="Taille du sous-ensemble (pour tests locaux)")
     parser.add_argument("--n_epochs", type=int, default=25, help="Nombre d'époques")
     parser.add_argument("--batch_size", type=int, default=1024, help="Taille des batchs")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate (AdamW)")
     parser.add_argument("--rep_neurons", type=int, default=256, help="Nombre de neurones de représentation (libres)")
-    parser.add_argument("--infer_steps", type=int, default=32, help="Nombre de pas d'inférence (T)")
+    parser.add_argument("--infer_steps", type=int, default=1, help="Nombre de pas d'inférence (T)")
     parser.add_argument("--lr_x", type=float, default=0.01, help="Learning rate de l'inférence (SGD sur x)")
     
     args = parser.parse_args()
