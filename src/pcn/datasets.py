@@ -150,3 +150,29 @@ def get_fmnist_dataloaders(batch_size=1024, subset_size=None):
     val_loader = DataLoader(fmnist_val, batch_size=batch_size, shuffle=False) #[cite: 1]
 
     return {"train": train_loader, "val": val_loader, "input_dim": 1024, "shape": (1, 32, 32)}
+def get_CIFAR10_dataloaders(batch_size=1024, subset_size=None):
+    """
+    Charge le dataset Fashion-MNIST. 
+    subset_size permet de réduire drastiquement la taille pour les tests locaux.
+    """
+    
+    fmnist_full = torchvision.datasets.CIFAR10(
+        root='./data', train=True, download=True 
+    ) #
+
+    # Réduction du dataset pour les tests locaux
+    if subset_size is not None:
+        fmnist_full = Subset(fmnist_full, range(subset_size))
+        train_size = int(0.8 * len(fmnist_full))
+        val_size = len(fmnist_full) - train_size
+    else:
+        # Séparation standard (50k train / 10k val)[cite: 1]
+        train_size = 50000
+        val_size = 10000
+
+    fmnist_train, fmnist_val = random_split(fmnist_full, [train_size, val_size]) #[cite: 1]
+
+    train_loader = DataLoader(fmnist_train, batch_size=batch_size, shuffle=True) #[cite: 1]
+    val_loader = DataLoader(fmnist_val, batch_size=batch_size, shuffle=False) #[cite: 1]
+
+    return {"train": train_loader, "val": val_loader, "input_dim": 1024, "shape": (1, 32, 32)}

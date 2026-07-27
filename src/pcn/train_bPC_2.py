@@ -4,7 +4,7 @@ import wandb
 import os
 import argparse
 from models import VGG5_bPC_Paper
-from datasets import get_fmnist_dataloaders
+from datasets import get_fmnist_dataloaders,get_CIFAR10_dataloaders
 import torch.nn.functional as F
 
 class AttrDict(dict):
@@ -29,7 +29,10 @@ def main(cf):
 
     # --- CHARGEMENT DES DONNÉES ---
     # Le dataset est fixé à fMNIST pour l'instant via dataset.py, mais on le rend paramétrable dans la config
-    datasets = get_fmnist_dataloaders(batch_size=cf.batch_size, subset_size=cf.subset_size)
+    if cf.dataset == "fmnist":
+        datasets = get_fmnist_dataloaders(batch_size=cf.batch_size, subset_size=cf.subset_size)
+    elif cf.dataset == "CIFAR10":
+        datasets = get_CIFAR10_dataloaders(batch_size=cf.batch_size, subset_size=cf.subset_size)
     
     # --- INITIALISATION DU MODÈLE ---
     bpc_model = VGG5_bPC_Paper(
@@ -114,7 +117,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Script d'entraînement du modèle bPC")
     
     # --- ARGUMENTS LIGNE DE COMMANDE ---
-    parser.add_argument("--dataset", choices=['fmnist'], default='fmnist', help="Nom du dataset")
+    parser.add_argument("--dataset", choices=['fmnist','CIFAR10'], default='fmnist', help="Nom du dataset")
     parser.add_argument("--subset_size", type=int, default=None, help="Taille du sous-ensemble (pour tests locaux)")
     parser.add_argument("--n_epochs", type=int, default=25, help="Nombre d'époques")
     parser.add_argument("--batch_size", type=int, default=1024, help="Taille des batchs")
@@ -142,7 +145,7 @@ if __name__ == "__main__":
     # Paramètres du Modèle bPC
     cf.num_labels = 10
     cf.rep_neurons = args.rep_neurons
-    cf.alpha_gen = 1e-4
+    cf.alpha_gen = 1e-5
     cf.alpha_disc = 1.0
     
     # Paramètres d'inférence (x)
