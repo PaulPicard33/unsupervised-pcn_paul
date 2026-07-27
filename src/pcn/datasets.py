@@ -157,7 +157,7 @@ def get_CIFAR10_dataloaders(batch_size=1024, subset_size=None):
     """
     
     fmnist_full = torchvision.datasets.CIFAR10(
-        root='./data/CIFAR10', train=True, download=True 
+        root='./data/cifar10', train=True, download=True 
     ) #
 
     # Réduction du dataset pour les tests locaux
@@ -170,7 +170,7 @@ def get_CIFAR10_dataloaders(batch_size=1024, subset_size=None):
         train_size = 50000
         val_size = 10000
 
-    fmnist_train, fmnist_val = random_split(fmnist_full, [train_size, val_size]) #[cite: 1]
+    fmnist_train, fmnist_val = random_split(fmnist_full) #[cite: 1]
 
     train_loader = DataLoader(fmnist_train, batch_size=batch_size, shuffle=True) #[cite: 1]
     val_loader = DataLoader(fmnist_val, batch_size=batch_size, shuffle=False) #[cite: 1]
