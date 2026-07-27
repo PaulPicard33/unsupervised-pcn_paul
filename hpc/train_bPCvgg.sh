@@ -14,7 +14,7 @@
 #SBATCH --error=logs/%x_%j.err
 # Explication : Fichier où seront écrites les erreurs. Très utile pour débugger si le script plante.
 
-#SBATCH --partition=gpu
+#SBATCH -C a100
 # Explication : Demande à utiliser la partition (file d'attente) dédiée aux GPUs. À adapter selon les noms configurés sur votre cluster (ex: 'gpu_p13', 'rtx3090', etc.).
 
 #SBATCH --nodes=1
@@ -26,7 +26,7 @@
 #SBATCH --cpus-per-task=8
 # Explication : Nombre de cœurs CPU alloués. Important si vous augmentez le 'num_workers' de vos DataLoaders PyTorch pour charger les images plus vite.
 
-#SBATCH --gres=gpu:1
+##SBATCH --gres=gpu:1
 # Explication : Demande l'allocation d'un GPU (Generic Resource). Si vous visez une carte spécifique, cela peut devenir '--gres=gpu:v100:1' ou '--gres=gpu:a100:1'.
 
 #SBATCH --time=12:00:00
