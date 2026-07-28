@@ -5,7 +5,7 @@
 # DIRECTIVES SLURM (Paramétrage des ressources du cluster HPC)
 # ---------------------------------------------------------------------
 
-#SBATCH --job-name=bPC_train
+#SBATCH --job-name=bPC_eval
 # Explication : Donne un nom à votre job pour le repérer facilement dans la file d'attente (via la commande 'squeue').
 
 #SBATCH --output=logs/%x_%j.out
@@ -14,7 +14,7 @@
 #SBATCH --error=logs/%x_%j.err
 # Explication : Fichier où seront écrites les erreurs. Très utile pour débugger si le script plante.
 
-#SBATCH --partition=gpu
+#SBATCH -C a100
 # Explication : Demande à utiliser la partition (file d'attente) dédiée aux GPUs. À adapter selon les noms configurés sur votre cluster (ex: 'gpu_p13', 'rtx3090', etc.).
 
 #SBATCH --nodes=1
@@ -26,7 +26,7 @@
 #SBATCH --cpus-per-task=8
 # Explication : Nombre de cœurs CPU alloués. Important si vous augmentez le 'num_workers' de vos DataLoaders PyTorch pour charger les images plus vite.
 
-#SBATCH --gres=gpu:1
+##SBATCH --gres=gpu:1
 # Explication : Demande l'allocation d'un GPU (Generic Resource). Si vous visez une carte spécifique, cela peut devenir '--gres=gpu:v100:1' ou '--gres=gpu:a100:1'.
 
 #SBATCH --time=12:00:00
@@ -66,7 +66,7 @@ export WANDB_API_KEY="wandb_v1_0yXYtXk10E9m3IrQtLWnMqwFk1R"
 
 # Explication : Exécution du script d'entraînement. 
 # L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.
-python eval_bPC.py --model_path models/bpc-fmnist-latent=256-lr=0.0001-steps=32.pt
+python src/pcn/eval_bPC.py --model_path models/bpc-fmnist-latent=256-lr=0.0001-steps=32.pt
 
 # Explication : Trace de fin pour confirmer que le job ne s'est pas coupé en plein milieu.
 echo "========================================="

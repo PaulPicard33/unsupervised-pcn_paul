@@ -140,7 +140,7 @@ def main(cf):
     os.environ["WANDB__SERVICE_WAIT"] = "300" #[cite: 6]
     wandb.login() #[cite: 6]
     run_name = "eval-" + os.path.basename(cf.model_path) if cf.model_path else "eval-random-weights" #[cite: 6]
-    wandb.init(project="bpc-generative", config=cf, name=run_name, job_type="evaluation") #[cite: 6]
+    wandb.init(project="mon-projet-pcn", config=cf, name=run_name, job_type="evaluation") #[cite: 6]
 
     datasets = get_fmnist_dataloaders(batch_size=cf.batch_size, subset_size=cf.subset_size)
     val_loader = datasets["val"]
