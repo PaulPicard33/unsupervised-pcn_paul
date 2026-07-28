@@ -131,7 +131,7 @@ def get_fmnist_dataloaders(batch_size=1024, subset_size=None):
     ])
 
     fmnist_full = torchvision.datasets.FashionMNIST(
-        root='./data/fmnist', train=True, download=True, transform=transform_fmnist_padded
+        root='../data_saved/fmnist', train=True, download=True, transform=transform_fmnist_padded
     ) #
 
     # Réduction du dataset pour les tests locaux

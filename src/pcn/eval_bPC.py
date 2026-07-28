@@ -55,7 +55,7 @@ def evaluate_generation(model, device, cf):
     batch_size = 10
     latent_dim = cf.num_labels + cf.rep_neurons
     
-    dummy_input = torch.randn(batch_size, 1, 32, 32, device=device)
+    dummy_input = torch.randn(batch_size, 3, 32, 32, device=device)
     x_init = model.bottom_up_sweep(dummy_input)
     x_init = [torch.randn_like(tensor) * 0.1 for tensor in x_init]
     
