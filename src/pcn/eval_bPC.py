@@ -82,6 +82,7 @@ def evaluate_generation(model, device, cf):
         img = generated_images[i].squeeze().numpy()
         img = (img + 1.0) / 2.0
         img = np.clip(img, 0, 1)
+        axes[i].imshow(np.transpose(img,(1,2,0)), cmap='gray')
         axes[i].set_title(f"Label {i}")
         axes[i].axis('off')
     plt.tight_layout()
