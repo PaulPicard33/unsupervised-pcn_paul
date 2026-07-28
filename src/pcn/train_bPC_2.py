@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 import wandb
 import os
+import sys 
 import argparse
 from models import VGG5_bPC_Paper
 from datasets import get_fmnist_dataloaders,get_CIFAR10_dataloaders
@@ -40,15 +41,25 @@ def main(cf):
         num_labels=cf.num_labels, 
         rep_neurons=cf.rep_neurons, 
         alpha_gen=cf.alpha_gen, 
-        alpha_disc=cf.alpha_disc
+        alpha_disc=cf.alpha_disc,
+        cifar=True if cf.dataset == "CIFAR10" else False
     ).to(device)
-    
-    optimizer_theta = optim.AdamW(
-        bpc_model.parameters(), 
-        lr=cf.lr, 
-        weight_decay=cf.weight_decay
-    )
+    # --- 1. SÉPARATION DES OPTIMISEURS SELON LA TABLE 7[cite: 2] ---
+    # params_gen regroupe W et la partie de V qui prédit les neurones libres[cite: 2]
+    params_gen = list(bpc_model.W_convs.parameters()) + \
+                list(bpc_model.W_linear.parameters()) + \
+                list(bpc_model.V_linear_free.parameters())
 
+    # params_disc regroupe le reste de la voie V (qui mène aux labels)[cite: 2]
+    params_disc = list(bpc_model.V_convs.parameters()) + \
+                list(bpc_model.V_linear_labels.parameters())
+
+    # Taux d'apprentissage distincts (lr_theta_gen et lr_theta_disc)[cite: 2]
+    optimizer_gen = optim.AdamW(params_gen, lr=1e-3, weight_decay=1e-4) 
+    optimizer_disc = optim.AdamW(params_disc, lr=1e-4, weight_decay=1e-4)
+    # --- 2. SCHEDULER COSINE ANNEALING[cite: 2] ---
+    scheduler_gen = optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=cf.epochs)
+    scheduler_disc = optim.lr_scheduler.CosineAnnealingLR(optimizer_disc, T_max=cf.epochs)
     # Masque pour le clampage partiel (fige les 'num_labels' premières composantes)
     latent_dim = cf.num_labels + cf.rep_neurons
     latent_mask = torch.zeros(latent_dim, device=device)
@@ -80,16 +91,19 @@ def main(cf):
                 clamped_indices=[0], 
                 steps=cf.infer_steps, 
                 lr_x=cf.lr_x, 
+                lr_x_free=cf.lr_x_free,
                 partial_clamp=(5, latent_mask.unsqueeze(0)),
                 activity_decay=cf.activity_decay
             )
             
-            # 3. Mise à jour des poids
-            optimizer_theta.zero_grad()
+            optimizer_gen.zero_grad()
+            optimizer_disc.zero_grad()
+            
             loss = bpc_model.compute_energy(x_inferred)
             loss.backward()
-            optimizer_theta.step()
             
+            optimizer_gen.step()
+            optimizer_disc.step()
             total_energy += loss.item()
             
             # Log par batch (optionnel, peut être lourd)
@@ -98,10 +112,14 @@ def main(cf):
 
         # --- LOGGING WANDB FIN D'EPOCH ---
         avg_energy = total_energy / len(datasets["train"])
+        # Mise à jour des taux d'apprentissage à chaque époque[cite: 2]
+        scheduler_gen.step()
+        scheduler_disc.step()
         wandb.log({
             "epoch": epoch,
             "train_energy_avg": avg_energy,
-            "lr": optimizer_theta.param_groups[0]['lr']
+            "lr_gen": optimizer_gen.param_groups[0]['lr'],
+            "lr_disc": optimizer_disc.param_groups[0]['lr']
         })
         
         print(f"Epoch [{epoch+1}/{cf.n_epochs}] - Énergie moyenne: {avg_energy:.4f}")
@@ -120,13 +138,13 @@ if __name__ == "__main__":
     # --- ARGUMENTS LIGNE DE COMMANDE ---
     parser.add_argument("--dataset", choices=['fmnist','CIFAR10'], default='CIFAR10', help="Nom du dataset")
     parser.add_argument("--subset_size", type=int, default=None, help="Taille du sous-ensemble (pour tests locaux)")
-    parser.add_argument("--n_epochs", type=int, default=25, help="Nombre d'époques")
+    parser.add_argument("--n_epochs", type=int, default=1, help="Nombre d'époques")
     parser.add_argument("--batch_size", type=int, default=1024, help="Taille des batchs")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate (AdamW)")
     parser.add_argument("--rep_neurons", type=int, default=256, help="Nombre de neurones de représentation (libres)")
     parser.add_argument("--infer_steps", type=int, default=1, help="Nombre de pas d'inférence (T)")
     parser.add_argument("--lr_x", type=float, default=0.01, help="Learning rate de l'inférence (SGD sur x)")
-    
+    parser.add_argument("--lr_x_free", type=float, default=0.01, help="Learning rate de l'inférence (SGD sur x libre)")
     args = parser.parse_args()
 
     # --- DICTIONNAIRE DE CONFIGURATION ---
@@ -152,6 +170,7 @@ if __name__ == "__main__":
     # Paramètres d'inférence (x)
     cf.infer_steps = args.infer_steps
     cf.lr_x = args.lr_x
+    cf.lr_x_free = args.lr_x_free
     cf.activity_decay = 1e-3
 
     main(cf)

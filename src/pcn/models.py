@@ -605,96 +605,106 @@ class PCTrainer(object):
         return float(test_mse)
 
 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
 class VGG5_bPC_Paper(nn.Module):
-    def __init__(self, num_labels=10, rep_neurons=256, alpha_gen=1e-4, alpha_disc=1.0,cifar=True):
+    def __init__(self, num_labels=10, rep_neurons=256, alpha_gen=1e-4, alpha_disc=1.0):
         super().__init__()
         self.L = 6
-        self.alpha_gen = alpha_gen #[cite: 1]
-        self.alpha_disc = alpha_disc #[cite: 1]
-        self.latent_dim = num_labels + rep_neurons #[cite: 1]
-        self.num_labels = num_labels #[cite: 1]
+        self.alpha_gen = alpha_gen
+        self.alpha_disc = alpha_disc
+        self.latent_dim = num_labels + rep_neurons 
+        self.num_labels = num_labels
         
-        self.activation = nn.LeakyReLU() #[cite: 1]
+        self.activation = nn.GELU() #
 
-        # Voie Discriminative (V)[cite: 1]
         self.V_convs = nn.ModuleList([
-            nn.Sequential(nn.Conv2d(3 if cifar else 1, 128, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
+            nn.Sequential(nn.Conv2d(3, 128, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
             nn.Sequential(nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
             nn.Sequential(nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2)),
             nn.Sequential(nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1), nn.MaxPool2d(2, 2))
-        ]) #[cite: 1]
-        self.V_linear = nn.Sequential(nn.Flatten(), nn.Linear(2048, self.latent_dim), nn.Identity()) #[cite: 1]
+        ])
+        
+        # SÉPARATION PHYSIQUE pour le Dual Optimizer
+        self.V_linear_labels = nn.Sequential(nn.Flatten(), nn.Linear(2048, self.num_labels), nn.Identity())
+        self.V_linear_free = nn.Sequential(nn.Flatten(), nn.Linear(2048, rep_neurons), nn.Identity())
 
-        # Voie Générative (W)[cite: 1]
-        self.W_linear = nn.Sequential(nn.Linear(self.latent_dim, 2048), nn.Unflatten(1, (512, 2, 2))) #[cite: 1]
+        self.W_linear = nn.Sequential(nn.Linear(self.latent_dim, 2048), nn.Unflatten(1, (512, 2, 2)))
         self.W_convs = nn.ModuleList([
             nn.ConvTranspose2d(512, 512, kernel_size=3, stride=2, padding=1, output_padding=1),
             nn.ConvTranspose2d(512, 256, kernel_size=3, stride=2, padding=1, output_padding=1),
             nn.ConvTranspose2d(256, 128, kernel_size=3, stride=2, padding=1, output_padding=1),
-            nn.Sequential(nn.ConvTranspose2d(128, 1, kernel_size=3, stride=2, padding=1, output_padding=1), nn.Tanh())
-        ]) #[cite: 1]
+            nn.Sequential(nn.ConvTranspose2d(128, 3, kernel_size=3, stride=2, padding=1, output_padding=1), nn.Tanh())
+        ])
 
-        # Pondération des énergies[cite: 1]
-        alpha_disc_L = torch.ones(self.latent_dim) * alpha_disc #[cite: 1]
-        alpha_disc_L[num_labels:] = alpha_gen #[cite: 1]
-        self.register_buffer('alpha_disc_L', alpha_disc_L) #[cite: 1]
+        alpha_disc_L = torch.ones(self.latent_dim) * alpha_disc
+        alpha_disc_L[num_labels:] = alpha_gen 
+        self.register_buffer('alpha_disc_L', alpha_disc_L)
 
     def _forward_V(self, x, layer_idx):
-        if layer_idx < 4: return self.V_convs[layer_idx](self.activation(x)) #[cite: 1]
-        return self.V_linear(self.activation(x)) #[cite: 1]
+        if layer_idx < 4: 
+            return self.V_convs[layer_idx](self.activation(x))
+        # Reconstruction du tenseur complet (B, 266) à partir des deux flux
+        logits = self.V_linear_labels(self.activation(x))
+        free_rep = self.V_linear_free(self.activation(x))
+        return torch.cat([logits, free_rep], dim=1)
 
     def _forward_W(self, x, layer_idx):
-        if layer_idx == 4: return self.W_linear(self.activation(x)) #[cite: 1]
-        return self.W_convs[3 - layer_idx](self.activation(x)) #[cite: 1]
+        if layer_idx == 4: return self.W_linear(self.activation(x))
+        return self.W_convs[3 - layer_idx](self.activation(x))
 
     def compute_energy(self, x):
         energy_gen = 0.0
         energy_disc = 0.0
-        
         for i in range(self.L - 1):
-            pred_gen = self._forward_W(x[i+1], i) #[cite: 1]
-            energy_gen += torch.sum((x[i] - pred_gen) ** 2) * (self.alpha_gen / 2) #[cite: 1]
+            pred_gen = self._forward_W(x[i+1], i)
+            energy_gen += torch.sum((x[i] - pred_gen) ** 2) * (self.alpha_gen / 2)
             
-            pred_disc = self._forward_V(x[i], i) #[cite: 1]
-            diff_sq_disc = (x[i+1] - pred_disc) ** 2 #[cite: 1]
+            pred_disc = self._forward_V(x[i], i)
+            diff_sq_disc = (x[i+1] - pred_disc) ** 2
             
             if i == self.L - 2:
-                energy_disc += torch.sum(diff_sq_disc * self.alpha_disc_L) / 2 #[cite: 1]
+                energy_disc += torch.sum(diff_sq_disc * self.alpha_disc_L) / 2
             else:
-                energy_disc += torch.sum(diff_sq_disc) * (self.alpha_disc / 2) #[cite: 1]
-                
+                energy_disc += torch.sum(diff_sq_disc) * (self.alpha_disc / 2)
         return energy_gen + energy_disc
 
     def bottom_up_sweep(self, x1):
-        x = [x1.clone()] #[cite: 1]
+        x = [x1.clone()]
         with torch.no_grad():
             for i in range(self.L - 1):
-                x.append(self._forward_V(x[-1], i)) #[cite: 1]
+                x.append(self._forward_V(x[-1], i))
         return x
 
-    def infer(self, x_init, clamped_indices, steps=32, lr_x=0.01, partial_clamp=None, activity_decay=0.0):
-        x = [tensor.clone() for tensor in x_init] #[cite: 1]
+    def infer(self, x_init, clamped_indices, steps=32, lr_x=0.01, lr_x_free=0.1, partial_clamp=None, activity_decay=0.0):
+        x = [tensor.clone() for tensor in x_init]
         free_params = []
         for i in range(self.L):
             if i not in clamped_indices:
-                x[i].requires_grad = True #[cite: 1]
-                free_params.append(x[i]) #[cite: 1]
+                x[i].requires_grad = True
+                free_params.append(x[i])
                 
         if len(free_params) > 0:
-            optimizer_x = optim.SGD(free_params, lr=lr_x, momentum=0.0) #[cite: 1]
+            optimizer_x = optim.SGD(free_params, lr=lr_x, momentum=0.0)
             for _ in range(steps):
-                optimizer_x.zero_grad() #[cite: 1]
-                energy = self.compute_energy(x) #[cite: 1]
-                energy.backward() #[cite: 1]
+                optimizer_x.zero_grad()
+                energy = self.compute_energy(x)
+                energy.backward()
                 
+                # Activity decay sur la sous-population libre
                 if activity_decay > 0.0 and x[-1].requires_grad:
-                    x[-1].grad.data[:, self.num_labels:] += activity_decay * x[-1].data[:, self.num_labels:] #[cite: 1]
+                    x[-1].grad.data[:, self.num_labels:] += activity_decay * x[-1].data[:, self.num_labels:]
+                
+                # Double Optimiseur d'Activité : Mise à l'échelle du gradient pour appliquer lr_x_free
+                if x[-1].requires_grad and lr_x_free != lr_x:
+                    x[-1].grad.data[:, self.num_labels:] *= (lr_x_free / lr_x)
                 
                 if partial_clamp is not None:
-                    layer_idx, mask = partial_clamp #[cite: 1]
+                    layer_idx, mask = partial_clamp
                     if x[layer_idx].requires_grad:
-                        x[layer_idx].grad.data *= (1.0 - mask) #[cite: 1]
+                        x[layer_idx].grad.data *= (1.0 - mask)
                         
-                optimizer_x.step() #[cite: 1]
-                
-        return [tensor.detach() for tensor in x] #[cite: 1]
+                optimizer_x.step()
+        return [tensor.detach() for tensor in x]
