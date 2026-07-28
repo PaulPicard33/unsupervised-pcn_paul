@@ -610,13 +610,14 @@ import torch.nn as nn
 import torch.optim as optim
 
 class VGG5_bPC_Paper(nn.Module):
-    def __init__(self, num_labels=10, rep_neurons=256, alpha_gen=1e-4, alpha_disc=1.0):
+    def __init__(self, num_labels=10, rep_neurons=256, alpha_gen=1e-4, alpha_disc=1.0,cifar=True):
         super().__init__()
         self.L = 6
         self.alpha_gen = alpha_gen
         self.alpha_disc = alpha_disc
         self.latent_dim = num_labels + rep_neurons 
         self.num_labels = num_labels
+        self.cifar=cifar
         
         self.activation = nn.GELU() #
 
