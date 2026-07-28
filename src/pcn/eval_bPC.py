@@ -8,7 +8,7 @@ import wandb
 from sklearn.manifold import TSNE
 
 from models import VGG5_bPC_Paper
-from datasets import get_fmnist_dataloaders
+from datasets import get_fmnist_dataloaders, get_CIFAR10_dataloaders
 
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
@@ -142,7 +142,8 @@ def main(cf):
     run_name = "eval-" + os.path.basename(cf.model_path) if cf.model_path else "eval-random-weights" #[cite: 6]
     wandb.init(project="mon-projet-pcn", config=cf, name=run_name, job_type="evaluation") #[cite: 6]
 
-    datasets = get_fmnist_dataloaders(batch_size=cf.batch_size, subset_size=cf.subset_size)
+    datasets = get_CIFAR10_dataloaders(batch_size=cf.batch_size, subset_size=cf.subset_size) if 'CIFAR10' in cf.model_path else get_fmnist_dataloaders(batch_size=cf.batch_size, subset_size=cf.subset_size)
+    train_loader = datasets["train"]
     val_loader = datasets["val"]
     
     bpc_model = VGG5_bPC_Paper(
@@ -161,7 +162,7 @@ def main(cf):
     evaluate_discrimination(bpc_model, val_loader, device, cf)
     evaluate_generation(bpc_model, device, cf)
     
-    tsne_dataset = get_fmnist_dataloaders(batch_size=1000, subset_size=1000)
+    tsne_dataset = get_CIFAR10_dataloaders(batch_size=1000, subset_size=1000) if 'CIFAR10' in cf.model_path else get_fmnist_dataloaders(batch_size=1000, subset_size=1000)
     plot_tsne_layers(bpc_model, tsne_dataset["val"], device)
     
     wandb.finish() #[cite: 6]
