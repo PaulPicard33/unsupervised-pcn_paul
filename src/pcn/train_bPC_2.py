@@ -58,8 +58,8 @@ def main(cf):
     optimizer_gen = optim.AdamW(params_gen, lr=1e-3, weight_decay=1e-4) 
     optimizer_disc = optim.AdamW(params_disc, lr=1e-4, weight_decay=1e-4)
     # --- 2. SCHEDULER COSINE ANNEALING[cite: 2] ---
-    scheduler_gen = optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=cf.epochs)
-    scheduler_disc = optim.lr_scheduler.CosineAnnealingLR(optimizer_disc, T_max=cf.epochs)
+    scheduler_gen = optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=cf.n_epochs)
+    scheduler_disc = optim.lr_scheduler.CosineAnnealingLR(optimizer_disc, T_max=cf.n_epochs)
     # Masque pour le clampage partiel (fige les 'num_labels' premières composantes)
     latent_dim = cf.num_labels + cf.rep_neurons
     latent_mask = torch.zeros(latent_dim, device=device)
