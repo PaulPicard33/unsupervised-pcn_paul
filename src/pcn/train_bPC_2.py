@@ -49,8 +49,26 @@ def main(cf):
     # Taux d'apprentissage distincts (lr_theta_gen et lr_theta_disc)[cite: 2]
     optimizer_theta= optim.Adam(bpc_model.parameters(), lr=cf.lr,weight_decay=cf.weight_decay)
     # --- 2. SCHEDULER COSINE ANNEALING[cite: 2] ---
-    scheduler_theta_warmup= optim.lr_scheduler.LinearLR(optimizer_theta, start_factor=1,end_factor=1.1, total_iters=cf.warmup_epochs)
-    scheduler_theta_cosine= optim.lr_scheduler.CosineAnnealingLR(optimizer_theta,eta_min=0.1, T_max=cf.n_epochs)
+    import math
+    from torch.optim.lr_scheduler import LambdaLR
+
+    # 1. Définir la fonction mathématique de la courbe de la Table 23
+    def custom_lr_multiplier(epoch, total_epochs):
+        warmup_epochs = max(1, int(0.1 * total_epochs)) # 10% des epochs
+        
+        if epoch < warmup_epochs:
+            # Phase 1 : Augmentation de 1.0 à 1.1
+            return 1.0 + 0.1 * (epoch / warmup_epochs)
+        else:
+            # Phase 2 : Chute cosinusoïdale de 1.1 à 0.1
+            progress = (epoch - warmup_epochs) / max(1, total_epochs - warmup_epochs)
+            return 0.1 + 0.5 * (1.1 - 0.1) * (1.0 + math.cos(math.pi * progress))
+
+    # 2. Créer l'unique scheduler en passant cette fonction via un lambda
+    scheduler_theta = LambdaLR(
+        optimizer_theta, 
+        lr_lambda=lambda e: custom_lr_multiplier(e, cf.n_epochs)
+    )
     # Masque pour le clampage partiel (fige les 'num_labels' premières composantes)
     latent_dim = cf.num_labels + cf.rep_neurons
     latent_mask = torch.zeros(latent_dim, device=device)
@@ -102,7 +120,7 @@ def main(cf):
         # --- LOGGING WANDB FIN D'EPOCH ---
         avg_energy = total_energy / len(datasets["train"])
         # Mise à jour des taux d'apprentissage à chaque époque[cite: 2]
-        scheduler_theta_cosine.step() if epoch > cf.warmup_epochs else scheduler_theta_warmup.step()
+        scheduler_theta.step()
         wandb.log({
             "epoch": epoch,
             "train_energy_avg": avg_energy,
