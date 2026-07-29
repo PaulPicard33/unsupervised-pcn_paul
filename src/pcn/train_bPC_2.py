@@ -99,8 +99,8 @@ def main(cf):
                 x_init, 
                 clamped_indices=[0], 
                 steps=cf.infer_steps, 
-                lr_x=cf.lr_x, 
-                lr_x_free=cf.lr_x_free,
+                lr_x=cf.e_lr, 
+                lr_x_free=cf.e_lr,
                 partial_clamp=(5, latent_mask.unsqueeze(0)),
                 activity_decay=cf.activity_decay
             )
