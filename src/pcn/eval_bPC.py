@@ -106,6 +106,135 @@ def evaluate_generation(model, device, cf):
     wandb.log({"eval/generated_images": wandb.Image(fig, caption="Images générées (Classes 0-9)")}) #[cite: 6]
     print("Images générées avec succès et envoyées sur W&B !") #[cite: 6]
     plt.close(fig) #[cite: 6]
+def evaluate_reconstruction(model, dataloader, device, cf):
+    model.eval()
+    print("\n--- Évaluation de la Reconstruction (256 neurones libres + Label) ---")
+    
+    images, labels = next(iter(dataloader))
+    images, labels = images[:10].to(device), labels[:10].to(device)
+    
+    # --- PHASE 1 : ENCODAGE ---
+    x_init = model.bottom_up_sweep(images)
+    x_init[0] = images
+    
+    latent_mask = torch.zeros(cf.num_labels + cf.rep_neurons, device=device)
+    latent_mask[:cf.num_labels] = 1.0 # On fige le label
+    
+    xL_label = torch.zeros((10, cf.num_labels + cf.rep_neurons), device=device)
+    xL_label[:, :cf.num_labels] = F.one_hot(labels, num_classes=cf.num_labels).float()
+    x_init[-1][:, :cf.num_labels] = xL_label[:, :cf.num_labels]
+    
+    # On laisse le réseau inférer les 256 neurones libres
+    x_encoded = model.infer(
+        x_init,
+        clamped_indices=[0], 
+        steps=cf.infer_steps_eval,
+        lr_x=cf.lr_x_eval,
+        partial_clamp=(model.L - 1, latent_mask.unsqueeze(0))
+    )
+    
+    # --- PHASE 2 : DÉCODAGE (Génération) ---
+    latent_state = x_encoded[-1].detach()
+    latent_state[:, :cf.num_labels] = xL_label[:, :cf.num_labels] # Force le label parfait
+    
+    x_init_dec = external_top_down_sweep(model, latent_state)
+    
+    # On coupe l'énergie discriminative pour laisser le générateur s'exprimer
+    original_alpha_disc = model.alpha_disc
+    model.alpha_disc = 0.0
+    
+    x_decoded = model.infer(
+        x_init_dec,
+        clamped_indices=[model.L - 1], 
+        steps=cf.infer_steps_gen,
+        lr_x=cf.lr_x_gen
+    )
+    
+    model.alpha_disc = original_alpha_disc # Restauration
+    
+    # --- AFFICHAGE ---
+    reconstructed_images = x_decoded[0].detach().cpu()
+    original_images = images.cpu()
+    
+    fig, axes = plt.subplots(2, 10, figsize=(15, 4))
+    fig.suptitle("Reconstruction bPC (Haut: Original | Bas: Reconstruit)", fontsize=14)
+    
+    for i in range(10):
+        # Original
+        img_orig = np.clip((original_images[i].numpy() + 1.0) / 2.0, 0, 1)
+        axes[0, i].imshow(np.transpose(img_orig, (1, 2, 0)))
+        axes[0, i].axis('off')
+        # Reconstruit
+        img_recon = np.clip((reconstructed_images[i].numpy() + 1.0) / 2.0, 0, 1)
+        axes[1, i].imshow(np.transpose(img_recon, (1, 2, 0)))
+        axes[1, i].axis('off')
+        
+    plt.tight_layout()
+    os.makedirs("results", exist_ok=True)
+    plt.savefig("results/reconstruction.png")
+    wandb.log({"eval/reconstruction": wandb.Image(fig, caption="Original vs Reconstruction")})
+    plt.close(fig)
+    print("Reconstructions générées avec succès et envoyées sur W&B !")
+def evaluate_inpainting(model, dataloader, device, cf, missing_ratio=0.5):
+    model.eval()
+    print(f"\n--- Évaluation de l'Inpainting ({missing_ratio*100}% de pixels manquants) ---")
+    
+    images, labels = next(iter(dataloader))
+    images, labels = images[:10].to(device), labels[:10].to(device)
+    batch_size = images.size(0)
+    
+    # Création du masque binaire sur tous les canaux[cite: 1]
+    mask_2d = (torch.rand(batch_size, 1, 32, 32, device=device) > missing_ratio).float()
+    mask = mask_2d.expand(-1, 3, -1, -1)
+    
+    # Les pixels manquants sont initialisés à zéro[cite: 1]
+    masked_images = images * mask 
+    
+    x_init = model.bottom_up_sweep(masked_images)
+    x_init[0] = masked_images.clone()
+    
+    # Utilisation du partial_clamp sur la couche 0 :
+    # Les gradients des pixels connus (mask=1) sont annulés (figés).
+    # Les gradients des pixels manquants (mask=0) sont actifs (le modèle les infère).
+    x_inferred = model.infer(
+        x_init,
+        clamped_indices=[], # x_0 n'est PAS dans les indices totalement figés
+        steps=cf.infer_steps_gen * 2, # On donne plus de temps pour l'inpainting
+        lr_x=cf.lr_x_gen,
+        partial_clamp=(0, mask) 
+    )
+    
+    inpainted_images = x_inferred[0].detach().cpu()
+    preds = x_inferred[-1][:, :cf.num_labels].argmax(dim=1)
+    
+    # --- AFFICHAGE ---
+    fig, axes = plt.subplots(3, 10, figsize=(15, 6))
+    fig.suptitle(f"Inpainting bPC - {missing_ratio*100}% occulté (Haut: Original | Milieu: Masqué | Bas: Inferred)", fontsize=14)
+    
+    for i in range(10):
+        # Original
+        img_orig = np.clip((images[i].cpu().numpy() + 1.0) / 2.0, 0, 1)
+        axes[0, i].imshow(np.transpose(img_orig, (1, 2, 0)))
+        axes[0, i].set_title(f"Vrai: {labels[i].item()}")
+        axes[0, i].axis('off')
+        
+        # Masqué
+        img_masked = np.clip((masked_images[i].cpu().numpy() + 1.0) / 2.0, 0, 1)
+        axes[1, i].imshow(np.transpose(img_masked, (1, 2, 0)))
+        axes[1, i].axis('off')
+        
+        # Reconstruit
+        img_inp = np.clip((inpainted_images[i].numpy() + 1.0) / 2.0, 0, 1)
+        axes[2, i].imshow(np.transpose(img_inp, (1, 2, 0)))
+        axes[2, i].set_title(f"Prédit: {preds[i].item()}")
+        axes[2, i].axis('off')
+        
+    plt.tight_layout()
+    os.makedirs("results", exist_ok=True)
+    plt.savefig(f"results/inpainting_{missing_ratio}.png")
+    wandb.log({f"eval/inpainting_{missing_ratio}": wandb.Image(fig, caption="Inpainting bPC")})
+    plt.close(fig)
+    print("Inpainting généré avec succès et envoyé sur W&B !")
 
 def plot_tsne_layers(model, dataloader, device):
     model.eval()
@@ -175,6 +304,12 @@ def main(cf):
 
     evaluate_discrimination(bpc_model, val_loader, device, cf)
     evaluate_generation(bpc_model, device, cf)
+    evaluate_discrimination(bpc_model, val_loader, device, cf)
+    
+    # Nouveaux tests génératifs !
+    evaluate_reconstruction(bpc_model, val_loader, device, cf)
+    evaluate_inpainting(bpc_model, val_loader, device, cf, missing_ratio=0.3)
+    evaluate_inpainting(bpc_model, val_loader, device, cf, missing_ratio=0.5)
     
     tsne_dataset = get_CIFAR10_dataloaders(batch_size=1000, subset_size=1000) if 'CIFAR10' in cf.model_path else get_fmnist_dataloaders(batch_size=1000, subset_size=1000)
     plot_tsne_layers(bpc_model, tsne_dataset["val"], device)
