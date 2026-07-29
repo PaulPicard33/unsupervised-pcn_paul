@@ -47,6 +47,16 @@ def evaluate_discrimination(model, dataloader, device, cf):
     
     return accuracy
 
+# À ajouter dans eval.py
+def external_top_down_sweep(model, xL):
+    x = [None] * model.L
+    x[-1] = xL.clone()
+    with torch.no_grad():
+        for i in range(model.L - 2, -1, -1):
+            x[i] = model._forward_W(x[i+1], i)
+    return x
+
+# Remplacement dans la fonction evaluate_generation
 def evaluate_generation(model, device, cf):
     model.eval()
     print("--- Évaluation de la capacité de génération ---")
@@ -55,27 +65,31 @@ def evaluate_generation(model, device, cf):
     batch_size = 10
     latent_dim = cf.num_labels + cf.rep_neurons
     
-    dummy_input = torch.randn(batch_size, 3, 32, 32, device=device)
-    x_init = model.bottom_up_sweep(dummy_input)
-    x_init = [torch.randn_like(tensor) * 0.1 for tensor in x_init]
-    
-    latent_mask = torch.zeros(latent_dim, device=device)
-    latent_mask[:cf.num_labels] = 1.0
-    
+    # 1. Préparation de la cible latente complète
     x_label = torch.zeros((batch_size, latent_dim), device=device)
     x_label[:, :cf.num_labels] = F.one_hot(labels, num_classes=cf.num_labels).float()
-    x_init[-1][:, :cf.num_labels] = x_label[:, :cf.num_labels]
     
+    # 2. LA CORRECTION : Initialisation Top-Down (On dessine à partir du label)
+    x_init = external_top_down_sweep(model, x_label)
+    
+    # 3. LA CORRECTION : Couper l'énergie discriminative
+    original_alpha_disc = model.alpha_disc
+    model.alpha_disc = 0.0
+    
+    # Inférence : On fige toute la couche latente (indice model.L - 1)
     x_inferred = model.infer(
         x_init,
-        clamped_indices=[], 
+        clamped_indices=[model.L - 1], 
         steps=cf.infer_steps_gen,
-        lr_x=cf.lr_x_gen,
-        partial_clamp=(model.L - 1, latent_mask.unsqueeze(0))
+        lr_x=cf.lr_x_gen
     )
+    
+    # Restauration de l'alpha
+    model.alpha_disc = original_alpha_disc
     
     generated_images = x_inferred[0].detach().cpu()
     
+    # ... (le reste de ton code d'affichage avec matplotlib reste identique)
     os.makedirs("results", exist_ok=True)
     fig, axes = plt.subplots(1, 10, figsize=(15, 2))
     for i in range(10):

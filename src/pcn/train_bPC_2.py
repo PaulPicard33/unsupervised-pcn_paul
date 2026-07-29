@@ -45,7 +45,6 @@ def main(cf):
         cifar=True if cf.dataset == "CIFAR10" else False
     ).to(device)
     # --- 1. SÉPARATION DES OPTIMISEURS SELON LA TABLE 7[cite: 2] ---
-    # params_gen regroupe W et la partie de V qui prédit les neurones libres[cite: 2]
     params_gen = list(bpc_model.W_convs.parameters()) + \
                 list(bpc_model.W_linear.parameters()) + \
                 list(bpc_model.V_linear_free.parameters())
