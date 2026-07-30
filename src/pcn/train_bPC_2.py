@@ -46,7 +46,6 @@ def main(cf):
     ).to(device)
    
 
-    # Taux d'apprentissage distincts (lr_theta_gen et lr_theta_disc)[cite: 2]
     optimizer_theta= optim.Adam(bpc_model.parameters(), lr=cf.lr,weight_decay=cf.weight_decay)
     # --- 2. SCHEDULER COSINE ANNEALING[cite: 2] ---
     import math
@@ -99,8 +98,7 @@ def main(cf):
                 x_init, 
                 clamped_indices=[0], 
                 steps=cf.infer_steps, 
-                lr_x=cf.e_lr, 
-                lr_x_free=cf.e_lr,
+                lr_e=cf.e_lr,
                 partial_clamp=(5, latent_mask.unsqueeze(0)),
                 activity_decay=cf.activity_decay
             )
