@@ -302,10 +302,8 @@ def main(cf):
     else:
         print("ATTENTION: Évaluation avec des poids aléatoires !")
 
-    evaluate_discrimination(bpc_model, val_loader, device, cf)
     evaluate_generation(bpc_model, device, cf)
     evaluate_discrimination(bpc_model, val_loader, device, cf)
-    
     # Nouveaux tests génératifs !
     evaluate_reconstruction(bpc_model, val_loader, device, cf)
     evaluate_inpainting(bpc_model, val_loader, device, cf, missing_ratio=0.3)

@@ -95,7 +95,7 @@ def main(cf):
             x_init[-1][:, :cf.num_labels] = xL_label[:, :cf.num_labels]
             
             # 2. Inférence itérative
-            x_inferred = bpc_model.infer(
+            x_inferred = bpc_model.infer_error_optim(
                 x_init, 
                 clamped_indices=[0], 
                 steps=cf.infer_steps, 

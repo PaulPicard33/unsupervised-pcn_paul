@@ -709,3 +709,56 @@ class VGG5_bPC_Paper(nn.Module):
                         
                 optimizer_x.step()
         return [tensor.detach() for tensor in x]
+    def infer_error_optim(self, x_init, clamped_indices, steps=5, lr_e=0.001):
+        # 1. Initialisation des paramètres libres (les tenseurs d'erreur eps)
+        eps_params = []
+        for i in range(1, self.L):
+            if i not in clamped_indices:
+                # L'erreur est la variable que l'on optimise (requires_grad=True)
+                e = torch.zeros_like(x_init[i], requires_grad=True)
+                eps_params.append(e)
+            else:
+                eps_params.append(None) # Placeholder pour les couches figées
+                
+        # L'optimiseur SGD agit désormais directement sur les erreurs, avec le lr=0.001 de la Table 23
+        optimizer_e = optim.SGD([e for e in eps_params if e is not None], lr=lr_e)
+        
+        for _ in range(steps):
+            optimizer_e.zero_grad()
+            
+            x = [x_init[0]] # La couche 0 (l'image) est toujours initialisée
+            energy_disc = 0.0
+            
+            # 2. Construction dynamique du graphe et calcul de l'énergie discriminative
+            for i in range(1, self.L):
+                pred_v = self._forward_V(x[-1], i-1)
+                
+                if i in clamped_indices:
+                    # Si la couche est figée (ex: le label x_L), on déduit l'erreur
+                    current_x = x_init[i]
+                    current_eps = current_x - pred_v
+                else:
+                    # Si la couche est libre, on déduit l'état x à partir de l'erreur optimisée
+                    current_eps = eps_params[i-1]
+                    current_x = pred_v + current_eps
+                    
+                x.append(current_x)
+                
+                # Le calcul de l'énergie discriminative est trivial et stable 
+                if i == self.L - 1:
+                    energy_disc += torch.sum((current_eps ** 2) * self.alpha_disc_L) / 2
+                else:
+                    energy_disc += torch.sum(current_eps ** 2) * (self.alpha_disc / 2)
+                    
+            # 3. Calcul de l'énergie générative (inchangée selon l'article)
+            energy_gen = 0.0
+            for i in range(self.L - 1):
+                pred_gen = self._forward_W(x[i+1], i)
+                energy_gen += torch.sum((x[i] - pred_gen) ** 2) * (self.alpha_gen / 2)
+                
+            # Descente de gradient
+            energy = energy_disc + energy_gen
+            energy.backward()
+            optimizer_e.step()
+            
+        return [tensor.detach() for tensor in x]
