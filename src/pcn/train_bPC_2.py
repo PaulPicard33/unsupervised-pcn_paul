@@ -96,7 +96,7 @@ def main(cf):
             # 2. Inférence itérative
             x_inferred = bpc_model.infer_error_optim(
                 x_init, 
-                clamped_indices=[0], 
+                clamped_indices=[0,bpc_model.L-1], 
                 steps=cf.infer_steps, 
                 lr_e=cf.e_lr
             )
@@ -104,7 +104,7 @@ def main(cf):
             optimizer_theta.zero_grad()
             
             loss = bpc_model.compute_energy(x_inferred)
-            loss.backward()
+            (loss/current_batch_size).backward()
             
             optimizer_theta.step()
             total_energy += loss.item()

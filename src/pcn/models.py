@@ -645,7 +645,9 @@ class VGG5_bPC_Paper(nn.Module):
         self.register_buffer('alpha_disc_L', alpha_disc_L)
 
     def _forward_V(self, x, layer_idx):
-        if layer_idx < 4: 
+        if layer_idx == 0:
+            return self.V_convs[0](x)
+        elif layer_idx < 4: 
             return self.V_convs[layer_idx](self.activation(x))
         # Reconstruction du tenseur complet (B, 266) à partir des deux flux
         logits = self.V_linear_labels(self.activation(x))
