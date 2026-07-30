@@ -46,7 +46,16 @@ def main(cf):
     ).to(device)
    
 
-    optimizer_theta= optim.Adam(bpc_model.parameters(), lr=cf.lr,weight_decay=cf.weight_decay)
+    # Dans la fonction main()
+    params_gen = list(bpc_model.W_convs.parameters()) + \
+                list(bpc_model.W_linear.parameters()) + \
+                list(bpc_model.V_linear_free.parameters())
+
+    params_disc = list(bpc_model.V_convs.parameters()) + \
+                list(bpc_model.V_linear_labels.parameters())
+
+    optimizer_gen = optim.Adam(params_gen, lr=1e-3, weight_decay=1e-4) 
+    optimizer_disc = optim.Adam(params_disc, lr=1e-4, weight_decay=1e-4)
     # --- 2. SCHEDULER COSINE ANNEALING[cite: 2] ---
     import math
     from torch.optim.lr_scheduler import LambdaLR
@@ -64,10 +73,12 @@ def main(cf):
             return 0.1 + 0.5 * (1.1 - 0.1) * (1.0 + math.cos(math.pi * progress))
 
     # 2. Créer l'unique scheduler en passant cette fonction via un lambda
-    scheduler_theta = LambdaLR(
+    """ scheduler_theta = LambdaLR(
         optimizer_theta, 
         lr_lambda=lambda e: custom_lr_multiplier(e, cf.n_epochs)
-    )
+    ) """
+    scheduler_gen= torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=cf.n_epochs)
+    scheduler_disc = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_disc, T_max=cf.n_epochs)
     # Masque pour le clampage partiel (fige les 'num_labels' premières composantes)
     latent_dim = cf.num_labels + cf.rep_neurons
     latent_mask = torch.zeros(latent_dim, device=device)
@@ -98,15 +109,19 @@ def main(cf):
                 x_init, 
                 clamped_indices=[0,bpc_model.L-1], 
                 steps=cf.infer_steps, 
-                lr_e=cf.e_lr
+                lr_x=cf.lr_x,
+                lr_x_free=cf.lr_x_free,
+                activity_decay=cf.activity_decay,
             )
             
-            optimizer_theta.zero_grad()
+            optimizer_gen.zero_grad()
+            optimizer_disc.zero_grad()
             
             loss = bpc_model.compute_energy(x_inferred)
             (loss/current_batch_size).backward()
             
-            optimizer_theta.step()
+            optimizer_gen.step()
+            optimizer_disc.step()
             total_energy += loss.item()
             
             # Log par batch (optionnel, peut être lourd)
@@ -116,11 +131,13 @@ def main(cf):
         # --- LOGGING WANDB FIN D'EPOCH ---
         avg_energy = total_energy / len(datasets["train"])
         # Mise à jour des taux d'apprentissage à chaque époque[cite: 2]
-        scheduler_theta.step()
+        scheduler_gen.step()
+        scheduler_disc.step()
         wandb.log({
             "epoch": epoch,
             "train_energy_avg": avg_energy,
-            "lr": optimizer_theta.param_groups[0]["lr"],
+            "lr_gen": optimizer_gen.param_groups[0]["lr"],
+            "lr_disc":optimizer_disc.param_groups[0]["lr"]
         })
         
         print(f"Epoch [{epoch+1}/{cf.n_epochs}] - Énergie moyenne: {avg_energy:.4f}")
@@ -140,11 +157,14 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", choices=['fmnist','CIFAR10'], default='CIFAR10', help="Nom du dataset")
     parser.add_argument("--subset_size", type=int, default=None, help="Taille du sous-ensemble (pour tests locaux)")
     parser.add_argument("--n_epochs", type=int, default=25, help="Nombre d'époques")
-    parser.add_argument("--batch_size", type=int, default=1024, help="Taille des batchs")
+    parser.add_argument("--batch_size", type=int, default=256, help="Taille des batchs")
     parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate (AdamW)")
     parser.add_argument("--rep_neurons", type=int, default=256, help="Nombre de neurones de représentation (libres)")
-    parser.add_argument("--infer_steps", type=int, default=1, help="Nombre de pas d'inférence (T)")
+    parser.add_argument("--infer_steps", type=int, default=32, help="Nombre de pas d'inférence (T)")
     parser.add_argument("--e_lr", type=float, default=0.001, help="Learning rate de l'inférence (SGD sur x)")
+    parser.add_argument("--activity_decay", type=float, default=1e-3, help="Décroissance de l'activité")
+    parser.add_argument("--lr_x_free", type=float, default=0.1, help="Learning rate pour les neurones libres (x)")
+    parser.add_argument("--lr_x", type=float, default=0.01, help="Learning rate pour les neurones liés (x)")
     args = parser.parse_args()
 
     # --- DICTIONNAIRE DE CONFIGURATION ---
@@ -171,6 +191,8 @@ if __name__ == "__main__":
     # Paramètres d'inférence (x)
     cf.infer_steps = args.infer_steps
     cf.e_lr = args.e_lr
-    cf.activity_decay = 1e-3
+    cf.activity_decay = args.activity_decay
+    cf.lr_x_free = args.lr_x_free
+    cf.lr_x = args.lr_x
 
     main(cf)
