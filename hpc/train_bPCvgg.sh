@@ -67,6 +67,7 @@ echo "========================================="
 # L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.
 python -u src/pcn/train_bPC_2.py --dataset='CIFAR10'
 
+
 # Explication : Trace de fin pour confirmer que le job ne s'est pas coupé en plein milieu.
 echo "========================================="
 echo "Fin du job : $(date)"
