@@ -54,8 +54,8 @@ def main(cf):
     params_disc = list(bpc_model.V_convs.parameters()) + \
                 list(bpc_model.V_linear_labels.parameters())
 
-    optimizer_gen = optim.Adam(params_gen, lr=1e-3, weight_decay=1e-4) 
-    optimizer_disc = optim.Adam(params_disc, lr=1e-4, weight_decay=1e-4)
+    optimizer_gen = optim.Adam(params_gen, lr=cf.lr_p, weight_decay=cf.weight_decay) 
+    optimizer_disc = optim.Adam(params_disc, lr=cf.lr_p_latent, weight_decay=cf.weight_decay)
     # --- 2. SCHEDULER COSINE ANNEALING[cite: 2] ---
     import math
     from torch.optim.lr_scheduler import LambdaLR
@@ -167,32 +167,32 @@ if __name__ == "__main__":
     parser.add_argument("--lr_x", type=float, default=0.01, help="Learning rate pour les neurones liés (x)")
     args = parser.parse_args()
 
-    # --- DICTIONNAIRE DE CONFIGURATION ---
+    # --- DICTIONNAIRE DE CONFIGURATION (Valeurs exactes de Bogacz) ---
     cf = AttrDict()
 
-    # Paramètres généraux
     cf.dataset = args.dataset
     cf.subset_size = args.subset_size
-    cf.n_epochs = args.n_epochs
-    cf.batch_size = args.batch_size
-    cf.log_freq = 10 # Log la loss tous les 10 batchs
+    cf.n_epochs = 50 # Le fichier indique 50 époques
+    cf.batch_size = 256 # Batch size réduit pour plus de stochasticité
+    cf.log_freq = 10 
     
-    # Paramètres d'optimisation (theta)
-    cf.lr = args.lr
-    cf.weight_decay = 1e-4
-    cf.warmup_epochs = round(0.1*cf.n_epochs)
+    # Paramètres d'optimisation des POIDS (Dual Optimizer)
+    cf.lr_p = 0.0001415926 # Learning rate voie discriminative
+    cf.lr_p_latent = 0.0015553778 # Learning rate voie générative/latente (10x plus grand !)[cite: 5]
+    cf.weight_decay = 0.0003497999 # Weight decay très précis[cite: 5]
     
     # Paramètres du Modèle bPC
-    cf.num_labels = 10
-    cf.rep_neurons = args.rep_neurons
-    cf.alpha_gen = 1e-5
-    cf.alpha_disc = 1.0
+    cf.num_labels = 10 #[cite: 5]
+    cf.rep_neurons = 256 # Les 256 neurones libres sont de retour[cite: 5]
     
-    # Paramètres d'inférence (x)
-    cf.infer_steps = args.infer_steps
-    cf.e_lr = args.e_lr
-    cf.activity_decay = args.activity_decay
-    cf.lr_x_free = args.lr_x_free
-    cf.lr_x = args.lr_x
-
+    # LE SECRET EST ICI : L'énergie générative est infime !
+    cf.alpha_gen = 0.0000001 # 1e-7[cite: 5]
+    cf.alpha_disc = 1.0 #[cite: 5]
+    
+    # Paramètres d'inférence des ÉTATS (x)
+    cf.infer_steps = 32 # T = 32 itérations pour l'entraînement[cite: 5]
+    cf.lr_x = 0.00192827 # Vitesse de relaxation discriminative[cite: 5]
+    cf.lr_x_free = 0.00316244 # Vitesse de relaxation des 256 neurones[cite: 5]
+    cf.activity_decay = 0.0
+    
     main(cf)
