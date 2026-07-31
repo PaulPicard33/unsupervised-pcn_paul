@@ -19,7 +19,7 @@ def main(cf):
     model_name = f"{cf.dataset}"
     if cf.subset_size is not None:
         model_name += f"-subset_size={cf.subset_size}"
-    model_name += f"-latent={cf.rep_neurons}-lr={cf.lr}-steps={cf.infer_steps}-epochs={cf.n_epochs}"
+    model_name += f"-latent={cf.rep_neurons}-lr_p={cf.lr_p}-steps={cf.infer_steps}-epochs={cf.n_epochs}"
 
     # --- INITIALISATION WANDB ---
     os.environ["WANDB__SERVICE_WAIT"] = "300"
@@ -46,16 +46,18 @@ def main(cf):
     ).to(device)
    
 
-    # Dans la fonction main()
-    params_gen = list(bpc_model.W_convs.parameters()) + \
-                list(bpc_model.W_linear.parameters()) + \
-                list(bpc_model.V_linear_free.parameters())
-
+    # 1. Isoler UNIQUEMENT les couches linéaires des 256 neurones libres
+    params_gen = list(bpc_model.V_linear_free.parameters()) # Ajoute la couche W correspondante si elle est séparée
+    
+    # 2. Tout le reste du réseau (Convolutions V et W, et logits)
     params_disc = list(bpc_model.V_convs.parameters()) + \
-                list(bpc_model.V_linear_labels.parameters())
+                  list(bpc_model.W_convs.parameters()) + \
+                  list(bpc_model.V_linear_labels.parameters()) + \
+                  list(bpc_model.W_linear.parameters()) # Couche W des labels
 
-    optimizer_gen = optim.Adam(params_gen, lr=cf.lr_p, weight_decay=cf.weight_decay) 
-    optimizer_disc = optim.Adam(params_disc, lr=cf.lr_p_latent, weight_decay=cf.weight_decay)
+    # 3. Application stricte des hyperparamètres du sweep
+    optimizer_gen = optim.Adam(params_gen, lr=0.001555, weight_decay=0.000349)
+    optimizer_disc = optim.Adam(params_disc, lr=0.000141, weight_decay=0.000349)
     # --- 2. SCHEDULER COSINE ANNEALING[cite: 2] ---
     import math
     from torch.optim.lr_scheduler import LambdaLR
@@ -194,5 +196,5 @@ if __name__ == "__main__":
     cf.lr_x = 0.00192827 # Vitesse de relaxation discriminative[cite: 5]
     cf.lr_x_free = 0.00316244 # Vitesse de relaxation des 256 neurones[cite: 5]
     cf.activity_decay = 0.0
-    
+
     main(cf)

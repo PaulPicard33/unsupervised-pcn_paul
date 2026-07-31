@@ -328,12 +328,15 @@ if __name__ == "__main__":
     cf.batch_size = args.batch_size
     cf.subset_size = args.subset_size
     cf.num_labels = 10
-    cf.rep_neurons = args.rep_neurons
-    cf.alpha_gen = 1e-4
-    cf.alpha_disc = 1.0
-    cf.infer_steps_eval = 20
-    cf.lr_x_eval = 0.01
-    cf.infer_steps_gen = 100
-    cf.lr_x_gen = 0.05
-
+    cf.rep_neurons = 256
+    # On réutilise les mêmes vitesses de relaxation optimales
+    cf.lr_x_eval = 0.00192827 #[cite: 5]
+    cf.lr_x_gen = 0.00316244 #[cite: 5]
+    
+    cf.rep_neurons = 256 # Toujours actif
+    cf.alpha_gen = 0.0000001 #[cite: 5]
+    cf.alpha_disc = 1.0 #[cite: 5]
+    
+    cf.infer_steps_eval = 100 # T_eval = 100 itérations au lieu de 20[cite: 5]
+    cf.infer_steps_gen = 100 # Idem pour la génération[cite: 5]
     main(cf)
