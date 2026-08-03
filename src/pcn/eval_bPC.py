@@ -130,7 +130,6 @@ def evaluate_reconstruction(model, dataloader, device, cf):
         clamped_indices=[0], 
         steps=cf.infer_steps_eval,
         lr_x=cf.lr_x_eval,
-        partial_clamp=(model.L - 1, latent_mask.unsqueeze(0))
     )
     
     # --- PHASE 2 : DÉCODAGE (Génération) ---
@@ -336,7 +335,7 @@ if __name__ == "__main__":
     cf.rep_neurons = 256 # Toujours actif
     cf.alpha_gen = 0.0000001 #[cite: 5]
     cf.alpha_disc = 1.0 #[cite: 5]
-    
+
     cf.infer_steps_eval = 100 # T_eval = 100 itérations au lieu de 20[cite: 5]
     cf.infer_steps_gen = 100 # Idem pour la génération[cite: 5]
     main(cf)
