@@ -673,6 +673,22 @@ class VGG5_bPC_Paper(nn.Module):
             else:
                 energy_disc += torch.sum(diff_sq_disc) * (self.alpha_disc / 2)
         return energy_gen + energy_disc
+    def compute_raw_energies(self, x):
+        """Calcule les énergies pures sans les pondérations alpha."""
+        energy_disc = 0.0
+        energy_gen = 0.0
+        
+        # 1. Énergie Discriminative (Bottom-Up)
+        for i in range(1, self.L):
+            pred_v = self._forward_V(x[i-1], i-1)
+            energy_disc += torch.sum((x[i] - pred_v) ** 2) / 2
+            
+        # 2. Énergie Générative (Top-Down)
+        for i in range(self.L - 1):
+            pred_w = self._forward_W(x[i+1], i)
+            energy_gen += torch.sum((x[i] - pred_w) ** 2) / 2
+            
+        return energy_disc, energy_gen
 
     def bottom_up_sweep(self, x1):
         x = [x1.clone()]
@@ -681,36 +697,66 @@ class VGG5_bPC_Paper(nn.Module):
                 x.append(self._forward_V(x[-1], i))
         return x
 
-    def infer(self, x_init, clamped_indices, steps=32, lr_x=0.01, lr_x_free=0.1, partial_clamp=None, activity_decay=0.0):
-        x = [tensor.clone() for tensor in x_init]
-        free_params = []
-        for i in range(self.L):
+    def infer(self, x_init, clamped_indices, steps=32, lr_x=0.001928, lr_x_free=0.003162):
+        """
+        Phase de relaxation : trouve l'état d'équilibre des neurones (x) 
+        en minimisant l'énergie locale, tout en gardant les poids figés.
+        """
+        # 1. Détacher les états initiaux du graphe précédent
+        x = [tensor.clone().detach() for tensor in x_init]
+        
+        # 2. Activer le calcul de gradient uniquement pour les couches cachées libres
+        for i in range(self.L - 1):
             if i not in clamped_indices:
                 x[i].requires_grad = True
-                free_params.append(x[i])
                 
-        if len(free_params) > 0:
-            optimizer_x = optim.SGD(free_params, lr=lr_x, momentum=0.0)
-            for _ in range(steps):
-                optimizer_x.zero_grad()
-                energy = self.compute_energy(x)
-                energy.backward()
+        # 3. Traitement spécial pour la couche latente (Indice L - 1)
+        # Les 10 premiers neurones (Labels) sont figés.
+        labels = x[-1][:, :self.num_labels].clone().detach()
+        
+        # Les 256 neurones suivants (Latents libres) sont activés et cherchent un équilibre.
+        free_latents = x[-1][:, self.num_labels:].clone().detach()
+        free_latents.requires_grad = True
+        
+        # La liste des tenseurs d'états que l'on va optimiser
+        states_to_optimize = [xi for xi in x[:-1] if xi.requires_grad] + [free_latents]
+
+        # --- BOUCLE DE RELAXATION ---
+        for step in range(steps):
+            
+            # Reconstruire la couche latente complète pour les calculs d'énergie
+            x_L_full = torch.cat([labels, free_latents], dim=1)
+            x_current = x[:-1] + [x_L_full]
+            
+            # Calcul des énergies (avec les alpha_disc et alpha_gen)
+            energy_disc, energy_gen = self.compute_raw_energies(x_current)
+            total_energy = (energy_disc * self.alpha_disc) + (energy_gen * self.alpha_gen)
+            
+            # Calcul des gradients de l'énergie par rapport aux états x UNIQUEMENT
+            grads = torch.autograd.grad(total_energy, states_to_optimize)
+            
+            # --- DESCENTE DE GRADIENT MANUELLE (SGD) ---
+            with torch.no_grad():
+                grad_idx = 0
                 
-                # Activity decay sur la sous-population libre
-                if activity_decay > 0.0 and x[-1].requires_grad:
-                    x[-1].grad.data[:, self.num_labels:] += activity_decay * x[-1].data[:, self.num_labels:]
+                # Mise à jour des couches standard (V et W)
+                for i in range(self.L - 1):
+                    if x[i].requires_grad:
+                        x[i] -= lr_x * grads[grad_idx]
+                        grad_idx += 1
                 
-                # Double Optimiseur d'Activité : Mise à l'échelle du gradient pour appliquer lr_x_free
-                if x[-1].requires_grad and lr_x_free != lr_x:
-                    x[-1].grad.data[:, self.num_labels:] *= (lr_x_free / lr_x)
+                # LA CORRECTION CRITIQUE : Mise à jour des 256 neurones libres.
+                # On divise lr_x_free par alpha_gen (1e-7) pour compenser l'écrasement de l'énergie !
+                effective_lr_free = lr_x_free / self.alpha_gen
+                free_latents -= effective_lr_free * grads[grad_idx]
                 
-                if partial_clamp is not None:
-                    layer_idx, mask = partial_clamp
-                    if x[layer_idx].requires_grad:
-                        x[layer_idx].grad.data *= (1.0 - mask)
-                        
-                optimizer_x.step()
-        return [tensor.detach() for tensor in x]
+        # --- FIN DE LA BOUCLE ---
+        
+        # Reconstruire la liste finale détachée
+        x_final = [xi.detach() for xi in x[:-1]]
+        x_final.append(torch.cat([labels, free_latents], dim=1).detach())
+        
+        return x_final
     def infer_error_optim(self, x_init, clamped_indices, steps=5, lr_e=0.001):
         # 1. Initialisation des paramètres libres (les tenseurs d'erreur eps)
         eps_params = []

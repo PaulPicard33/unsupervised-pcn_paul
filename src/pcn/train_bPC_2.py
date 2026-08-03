@@ -119,7 +119,8 @@ def main(cf):
             optimizer_gen.zero_grad()
             optimizer_disc.zero_grad()
             
-            loss = bpc_model.compute_energy(x_inferred)
+            energy_gen,energy_disc = bpc_model.compute_raw_energy(x_inferred)
+            loss=energy_disc+energy_gen
             (loss/current_batch_size).backward()
             
             optimizer_gen.step()
