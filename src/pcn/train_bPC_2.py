@@ -113,7 +113,6 @@ def main(cf):
                 steps=cf.infer_steps, 
                 lr_x=cf.lr_x,
                 lr_x_free=cf.lr_x_free,
-                activity_decay=cf.activity_decay,
             )
             
             optimizer_gen.zero_grad()
