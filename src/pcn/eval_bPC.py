@@ -200,7 +200,6 @@ def evaluate_inpainting(model, dataloader, device, cf, missing_ratio=0.5):
         clamped_indices=[], # x_0 n'est PAS dans les indices totalement figés
         steps=cf.infer_steps_gen * 2, # On donne plus de temps pour l'inpainting
         lr_x=cf.lr_x_gen,
-        partial_clamp=(0, mask) 
     )
     
     inpainted_images = x_inferred[0].detach().cpu()
