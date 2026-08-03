@@ -118,9 +118,14 @@ def main(cf):
             optimizer_gen.zero_grad()
             optimizer_disc.zero_grad()
             
-            energy_gen,energy_disc = bpc_model.compute_raw_energies(x_inferred)
-            loss=energy_disc+energy_gen
-            (loss/current_batch_size).backward()
+            # 5. Calcul des énergies au point d'équilibre
+            energy_disc_base, energy_disc_labels, energy_disc_free, energy_gen = bpc_model.compute_raw_energies(x_inferred)
+            
+            # 6. Loss des poids : Seul energy_disc_free subit la réduction par alpha_gen
+            loss_weights = energy_disc_base + energy_disc_labels + (energy_disc_free * cf.alpha_gen) + energy_gen
+            
+            # 7. Rétropropagation lissée sur la taille du batch
+            (loss_weights / current_batch_size).backward()
             
             optimizer_gen.step()
             optimizer_disc.step()

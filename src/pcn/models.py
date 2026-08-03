@@ -674,22 +674,33 @@ class VGG5_bPC_Paper(nn.Module):
                 energy_disc += torch.sum(diff_sq_disc) * (self.alpha_disc / 2)
         return energy_gen + energy_disc
     def compute_raw_energies(self, x):
-        """Calcule les énergies pures sans les pondérations alpha."""
-        energy_disc = 0.0
+        energy_disc_base = 0.0
         energy_gen = 0.0
         
         # 1. Énergie Discriminative (Bottom-Up)
-        for i in range(1, self.L):
+        # Couches 1 à L-2 (On s'arrête avant la couche latente)
+        for i in range(1, self.L - 1):
             pred_v = self._forward_V(x[i-1], i-1)
-            energy_disc += torch.sum((x[i] - pred_v) ** 2) / 2
+            energy_disc_base += torch.sum((x[i] - pred_v) ** 2) / 2
             
+        # Couche L-1 (Latente : Labels + Variables Libres)
+        pred_v_last = self._forward_V(x[-2], self.L - 2)
+        pred_logits = pred_v_last[:, :self.num_labels]
+        pred_free = pred_v_last[:, self.num_labels:]
+        
+        labels = x[-1][:, :self.num_labels]
+        free_latents = x[-1][:, self.num_labels:]
+        
+        # Séparation des deux énergies
+        energy_disc_labels = torch.sum((labels - pred_logits) ** 2) / 2
+        energy_disc_free = torch.sum((free_latents - pred_free) ** 2) / 2
+        
         # 2. Énergie Générative (Top-Down)
         for i in range(self.L - 1):
             pred_w = self._forward_W(x[i+1], i)
             energy_gen += torch.sum((x[i] - pred_w) ** 2) / 2
             
-        return energy_disc, energy_gen
-
+        return energy_disc_base, energy_disc_labels, energy_disc_free, energy_gen
     def bottom_up_sweep(self, x1):
         x = [x1.clone()]
         with torch.no_grad():
@@ -728,9 +739,14 @@ class VGG5_bPC_Paper(nn.Module):
             x_L_full = torch.cat([labels, free_latents], dim=1)
             x_current = x[:-1] + [x_L_full]
             
-            # Calcul des énergies (avec les alpha_disc et alpha_gen)
-            energy_disc, energy_gen = self.compute_raw_energies(x_current)
-            total_energy = (energy_disc * self.alpha_disc) + (energy_gen * self.alpha_gen)
+            # Calcul des énergies pures
+            energy_disc_base, energy_disc_labels, energy_disc_free, energy_gen = self.compute_raw_energies(x_current)
+            
+            # LA CORRECTION : L'énergie discriminative des neurones libres est pondérée par alpha_gen !
+            total_energy = (energy_disc_base * self.alpha_disc) + \
+                           (energy_disc_labels * self.alpha_disc) + \
+                           (energy_disc_free * self.alpha_gen) + \
+                           (energy_gen * self.alpha_gen)
             
             # Calcul des gradients de l'énergie par rapport aux états x UNIQUEMENT
             grads = torch.autograd.grad(total_energy, states_to_optimize)
