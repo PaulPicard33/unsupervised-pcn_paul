@@ -129,11 +129,11 @@ def main(cf):
             
             optimizer_gen.step()
             optimizer_disc.step()
-            total_energy += loss.item()
+            total_energy += loss_weights.item()
             
             # Log par batch (optionnel, peut être lourd)
             if batch_idx % cf.log_freq == 0:
-                 wandb.log({"batch_loss": loss.item()})
+                 wandb.log({"batch_loss": loss_weights.item()})
 
         # --- LOGGING WANDB FIN D'EPOCH ---
         avg_energy = total_energy / len(datasets["train"])
