@@ -75,7 +75,13 @@ class bPC_VGG(nn.Module):
         self.conv4 = nn.Conv2d(512, 512, kernel_size=3, padding=1, stride=1)
         self.pool4 = nn.MaxPool2d(2, 2)      # 3→1
         # flatten_size = 512 * 1 * 1 = 512
-        self.flatten_size = 512
+        # Dans __init__, après les définitions de pool :
+        h, w = input_size
+        for _ in range(4):          # 4 blocs MaxPool(2,2)
+            h, w = h // 2, w // 2
+        self.final_h    = h
+        self.final_w    = w
+        self.flatten_size = 512 * h * w   # 512 pour fMNIST, 2048 pour CIFAR10        
         self.fc_up = nn.Linear(self.flatten_size, output_size)
 
         # ── Couches du latent ─────────────────────────────────────────────────
@@ -98,18 +104,23 @@ class bPC_VGG(nn.Module):
 
         self.act          = nn.LeakyReLU(negative_slope=0.01)
         self.out_act_down = nn.Tanh()
+        # Recalculer les dims spatiales à chaque pool
+        h, w = input_size
+        pool_shapes = []
+        for channels in [128, 256, 512, 512]:
+            h, w = h // 2, w // 2
+            pool_shapes.append((channels, h, w))
+        # pool_shapes[0] = après pool1, ..., pool_shapes[3] = après pool4
 
-        # ── Vodes ─────────────────────────────────────────────────────────────
         self.vodes = [
-            Vode((output_size,),               frozen=True,  device=device),  # [0]  label supervisé
-            Vode((self.flatten_size,),          frozen=False, device=device),  # [1]  flatten après fc
-            Vode((512, 1, 1),                  frozen=False, device=device),  # [2]  conv4+pool4
-            Vode((512, 3, 3),                  frozen=False, device=device),  # [3]  conv3+pool3
-            Vode((256, 7, 7),                  frozen=False, device=device),  # [4]  conv2+pool2
-            Vode((128, 14, 14),                frozen=False, device=device),  # [5]  conv1+pool1
-            Vode((input_channels, *input_size),frozen=True,  device=device),  # [-1] image
+            Vode((output_size,),              frozen=True,  device=device),  # [0] label
+            Vode((self.flatten_size,),        frozen=False, device=device),  # [1] flatten
+            Vode(pool_shapes[3],              frozen=False, device=device),  # [2] après pool4
+            Vode(pool_shapes[2],              frozen=False, device=device),  # [3] après pool3
+            Vode(pool_shapes[1],              frozen=False, device=device),  # [4] après pool2
+            Vode(pool_shapes[0],              frozen=False, device=device),  # [5] après pool1
+            Vode((input_channels, *input_size), frozen=True, device=device), # [-1] image
         ]
-
         # ── Vode latent (neurones libres) ─────────────────────────────────────
         # Séparé des vodes principaux, optimisé avec un lr différent (lr_x_latent)
         # et des poids dédiés (latent_layer_up/down) mis à jour avec lr_p_latent.
@@ -180,7 +191,7 @@ class bPC_VGG(nn.Module):
                 latent = self.latent_vode.h
                 z = self.act(
                     self.fc_down(x_label) + self.latent_layer_down(latent)
-                ).reshape(-1, 512, 1, 1)
+                ).reshape(-1, 512, self.final_h, self.final_w)
                 self.vodes[2].h = z.clone()
                 z = self.act(self.deconv4(z))
                 self.vodes[3].h = z.clone()
@@ -252,7 +263,7 @@ class bPC_VGG(nn.Module):
         latent = self.latent_vode.h
         z = self.act(
             self.fc_down(self.vodes[0].h) + self.latent_layer_down(latent)
-        ).reshape(-1, 512, 1, 1)
+        ).reshape(-1, 512, self.final_h, self.final_w)
         self.vodes[2].u = z      # écrase le .u de la passe UP (intentionnel)
 
         z = self.act(self.deconv4(self.vodes[2].h))
@@ -492,7 +503,7 @@ def main(cf):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Entraînement bPC VGG5 avec neurones libres")
-    parser.add_argument("--dataset",     choices=["fmnist", "CIFAR10"], default="CIFAR10", help="Nom du dataset")
+    parser.add_argument("--dataset",     choices=["fmnist", "CIFAR10"], default="CIFAR10", help="Nom du dataset ")
     parser.add_argument("--subset_size", type=int,   default=None)
     parser.add_argument("--n_epochs",    type=int,   default=50)
     parser.add_argument("--batch_size",  type=int,   default=256)
