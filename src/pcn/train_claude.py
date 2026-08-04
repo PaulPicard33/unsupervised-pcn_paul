@@ -98,7 +98,7 @@ class bPC_VGG(nn.Module):
         # et leur somme entre dans relu → reshape → deconvolutions.
         self.fc_down = nn.Linear(output_size, self.flatten_size)
         self.deconv4 = nn.ConvTranspose2d(512, 512, kernel_size=3, padding=1, stride=2, output_padding=1)  # 1→3
-        self.deconv3 = nn.ConvTranspose2d(512, 256, kernel_size=3, padding=1, stride=2, output_padding=0)  # 3→7
+        self.deconv3 = nn.ConvTranspose2d(512, 256, kernel_size=3, padding=1, stride=2, output_padding=1)  # 3→7
         self.deconv2 = nn.ConvTranspose2d(256, 128, kernel_size=3, padding=1, stride=2, output_padding=1)  # 7→14
         self.deconv1 = nn.ConvTranspose2d(128, input_channels, kernel_size=3, padding=1, stride=2, output_padding=1)  # 14→28
 
@@ -155,7 +155,7 @@ class bPC_VGG(nn.Module):
             var = 1.0 if u.abs().sum().item() == 0 else self.latent_var
         else:
             var = 1.0
-        return 0.5 * (e * e) / var
+        return (0.5 * (e * e) / var).sum()
 
     # ── Passe feedforward (initialisation) ────────────────────────────────────
 
