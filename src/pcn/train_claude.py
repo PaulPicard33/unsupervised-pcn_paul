@@ -358,7 +358,7 @@ class bPC_VGG(nn.Module):
         optimizer_w_latent.zero_grad()
 
         E = self.compute_energy(x_label, y_image, weighted=False)
-        E.backward()
+        (E/y_image.size(0)).backward()
 
         optimizer_w.step()
         optimizer_w_latent.step()
@@ -461,8 +461,8 @@ def main(cf):
                 T=cf.infer_steps,
                 lr_h=cf.lr_x,
                 lr_h_latent=cf.lr_x_latent,
-                alpha_up=cf.alpha_gen,
-                alpha_down=cf.alpha_disc,
+                alpha_up=cf.alpha_disc,
+                alpha_down=cf.alpha_gen,
             )
 
             # 3. W-step : deux optimiseurs distincts pour poids normaux et latents
