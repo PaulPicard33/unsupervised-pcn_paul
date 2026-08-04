@@ -329,12 +329,7 @@ class bPC_VGG(nn.Module):
             optimizer_h.step()
             optimizer_h_latent.step()
 
-            # Détacher pour éviter l'accumulation du graphe
-            for v in self.vodes:
-                if not v.frozen:
-                    v.h = v.h.detach().requires_grad_(True)
-            self.latent_vode.h = self.latent_vode.h.detach().requires_grad_(True)
-
+            
         # Détacher proprement avant le W-step
         for v in self.vodes:
             if not v.frozen:
@@ -407,7 +402,7 @@ def main(cf):
         input_size=input_size,
         output_size=cf.num_labels,
         latent_dim=cf.latent_dim,
-        latent_var=cf.alpha_gen / cf.alpha_disc,   # = 1e-7 → prior très faible
+        latent_var=cf.alpha_disc / cf.alpha_gen,   # = 1e-7 → prior très faible
         device=str(device),
     ).to(device)
 
