@@ -65,7 +65,7 @@ echo "========================================="
 
 # Explication : Exécution du script d'entraînement. 
 # L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.
-python -u src/pcn/eval_bPC.py --model_path models/bpc-CIFAR10-latent=256-lr=0.0001-steps=8-epochs=25.pt
+python -u src/pcn/eval_bPC.py --model_path models/bpc-CIFAR10-T=32-ep=50.pt
 
 # Explication : Trace de fin pour confirmer que le job ne s'est pas coupé en plein milieu.
 echo "========================================="
