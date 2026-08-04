@@ -65,7 +65,7 @@ echo "========================================="
 # Authentification silencieuse pour WandB
 # Explication : Exécution du script d'entraînement. 
 # L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.
-python -u src/pcn/train_bPC_2.py --dataset='CIFAR10'
+python -u src/pcn/train_claude.py -
 
 
 # Explication : Trace de fin pour confirmer que le job ne s'est pas coupé en plein milieu.
