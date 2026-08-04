@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import os
 import argparse
 import numpy as np
+import wandb
 from sklearn.manifold import TSNE
 
 # Import de ta nouvelle architecture et des dataloaders
@@ -66,6 +67,8 @@ def evaluate_discrimination(model, dataloader, device, cf):
             
     accuracy = 100 * correct / total
     print(f"\n=> Précision (Accuracy) finale sur le set de validation : {accuracy:.2f}%")
+    wandb.log({"eval/accuracy": accuracy})
+
     return accuracy
 
 def plot_tsne_layers(model, dataloader, device):
@@ -118,12 +121,17 @@ def plot_tsne_layers(model, dataloader, device):
     plt.tight_layout()
     plt.savefig("results/tsne_vodes.png", dpi=150)
     print("Tracés t-SNE sauvegardés avec succès dans 'results/tsne_vodes.png' !")
+    wandb.log({"eval/tsne_layers": wandb.Image(fig, caption="Espace Latent (t-SNE) par couche")}) #[cite: 6]
     plt.close(fig)
 
 def main(cf):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Initialisation de l'évaluation sur : {device}")
-
+    # --- INITIALISATION WANDB ---
+    os.environ["WANDB__SERVICE_WAIT"] = "300" #[cite: 6]
+    wandb.login() #[cite: 6]
+    run_name = "eval-" + os.path.basename(cf.model_path) if cf.model_path else "eval-random-weights" #[cite: 6]
+    wandb.init(project="mon-projet-pcn", config=cf, name=run_name, job_type="evaluation") #[cite: 6]
     # Chargement des données
     if cf.dataset == "fmnist":
         datasets = get_fmnist_dataloaders(batch_size=cf.batch_size, subset_size=cf.subset_size)
@@ -162,6 +170,7 @@ def main(cf):
         tsne_dataset = get_CIFAR10_dataloaders(batch_size=1000, subset_size=1000)
         
     plot_tsne_layers(bpc_model, tsne_dataset["val"], device)
+    wandb.finish()  # Clôture de la session WandB
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Évaluation bPC (Inférence Classification & t-SNE)")
