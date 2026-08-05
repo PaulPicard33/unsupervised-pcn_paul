@@ -203,86 +203,48 @@ class bPC_VGG(nn.Module):
 
     # ── Calcul d'énergie bPC ──────────────────────────────────────────────────
 
-    def compute_energy(self, x_label, y_image,
-                       alpha_up=1.0, alpha_down=1.0, weighted=True):
-        """
-        Reproduit energy() de models.py + la logique AddLatent.
+    def compute_energy(self, x_label, y_image, alpha_up=1.0, alpha_down=1.0, weighted=True):
+        # ── PASSE UP (Discrimination) ──
+        u_up_5 = self.pool1(self.act(self.conv1(self.vodes[-1].h)))
+        u_up_4 = self.pool2(self.act(self.conv2(self.vodes[5].h)))
+        u_up_3 = self.pool3(self.act(self.conv3(self.vodes[4].h)))
+        u_up_2 = self.pool4(self.act(self.conv4(self.vodes[3].h)))
+        u_up_1 = self.vodes[2].h.flatten(start_dim=1)
+        u_up_0 = self.fc_up(self.vodes[1].h)
+        u_up_lat = self.latent_layer_up(self.vodes[1].h)
 
-        PASSE UP :
-          Chaque vode[i].u est mis à jour par les conv ascendantes.
-          latent_vode.u = latent_layer_up(hidden_flatten)
-          → latent_vode contribue à e_up avec sa propre variance (latent_var)
+        e_up = 0.0
+        e_up += 0.5 * ((self.vodes[5].h - u_up_5) ** 2).sum()
+        e_up += 0.5 * ((self.vodes[4].h - u_up_4) ** 2).sum()
+        e_up += 0.5 * ((self.vodes[3].h - u_up_3) ** 2).sum()
+        e_up += 0.5 * ((self.vodes[2].h - u_up_2) ** 2).sum()
+        e_up += 0.5 * ((self.vodes[1].h - u_up_1) ** 2).sum()
+        e_up += 0.5 * ((self.vodes[0].h - u_up_0) ** 2).sum() # L'énergie du label pour les poids !
+        e_up += 0.5 * ((self.latent_vode.h - u_up_lat) ** 2).sum() / self.latent_var
 
-        PASSE DOWN :
-          latent_vode.u = 0  (bias_latent = zeros → prior gaussien centré)
-          → la passe down pénalise h_latent ≠ 0 (regularisation L2)
-          La combination_fn_pre injecte latent dans la passe down :
-              fc_down(label) + latent_layer_down(latent_vode.h) → vode[2].u
+        # ── PASSE DOWN (Génération) ──
+        u_down_1 = self.act(self.fc_down(self.vodes[0].h) + self.latent_layer_down(self.latent_vode.h))
+        u_down_2 = self.vodes[1].h.reshape(-1, 512, self.final_h, self.final_w)
+        u_down_3 = self.act(self.deconv4(self.vodes[2].h))
+        u_down_4 = self.act(self.deconv3(self.vodes[3].h))
+        u_down_5 = self.act(self.deconv2(self.vodes[4].h))
+        u_down_img = self.out_act_down(self.deconv1(self.vodes[5].h))
 
-        Les deux énergies sont calculées sur leurs Vodes respectifs
-        (frozen exclus), puis l'énergie du latent_vode est ajoutée aux deux.
-        """
+        e_down = 0.0
+        e_down += 0.5 * ((self.vodes[1].h - u_down_1) ** 2).sum()
+        e_down += 0.5 * ((self.vodes[2].h - u_down_2) ** 2).sum()
+        e_down += 0.5 * ((self.vodes[3].h - u_down_3) ** 2).sum()
+        e_down += 0.5 * ((self.vodes[4].h - u_down_4) ** 2).sum()
+        e_down += 0.5 * ((self.vodes[5].h - u_down_5) ** 2).sum()
+        e_down += 0.5 * ((self.vodes[-1].h - u_down_img) ** 2).sum() # L'énergie de l'image pour les poids !
+        
+        # Prior latent : la cible de la passe descendante pour le latent est toujours 0
+        e_down += 0.5 * ((self.latent_vode.h - 0.0) ** 2).sum() / 1.0
 
-        # ── PASSE UP ─────────────────────────────────────────────────────────
-        z = self.act(self.conv1(self.vodes[-1].h))
-        z = self.pool1(z)
-        self.vodes[5].u = z
-
-        z = self.act(self.conv2(self.vodes[5].h))
-        z = self.pool2(z)
-        self.vodes[4].u = z
-
-        z = self.act(self.conv3(self.vodes[4].h))
-        z = self.pool3(z)
-        self.vodes[3].u = z
-
-        z = self.act(self.conv4(self.vodes[3].h))
-        z = self.pool4(z)
-        self.vodes[2].u = z
-
-        z_flat = z.flatten(start_dim=1)
-        self.vodes[1].u = z_flat
-
-        # Prédiction label (vode[0] est frozen, son énergie n'est pas comptée)
-        self.vodes[0].u = self.fc_up(self.vodes[1].h)
-
-        # Prédiction latent depuis le même hidden_flatten
-        self.latent_vode.u = self.latent_layer_up(self.vodes[1].h)
-
-        e_up = sum(
-            0.5 * ((v.h - v.u) ** 2).sum()
-            for v in self.vodes if not v.frozen
-        ) + self._latent_energy()  # latent contribue à l'énergie UP
-
-        # ── PASSE DOWN ───────────────────────────────────────────────────────
-        # Prior latent : u = 0 (bias_latent dans AddLatent)
-        self.latent_vode.u = torch.zeros_like(self.latent_vode.h)
-
-        # combination_fn_pre : fc_down(label) + latent_layer_down(latent_vode.h)
-        # puis activation → reshape → déconvolutions
-        latent = self.latent_vode.h
-        z = self.act(
-            self.fc_down(self.vodes[0].h) + self.latent_layer_down(latent)
-        ).reshape(-1, 512, self.final_h, self.final_w)
-        self.vodes[2].u = z      # écrase le .u de la passe UP (intentionnel)
-
-        z = self.act(self.deconv4(self.vodes[2].h))
-        self.vodes[3].u = z
-
-        z = self.act(self.deconv3(self.vodes[3].h))
-        self.vodes[4].u = z
-
-        z = self.act(self.deconv2(self.vodes[4].h))
-        self.vodes[5].u = z
-
-        self.vodes[-1].u = self.out_act_down(self.deconv1(self.vodes[5].h))
-
-        e_down = sum(
-            0.5 * ((v.h - v.u) ** 2).sum()
-            for v in self.vodes if not v.frozen
-        ) + self._latent_energy()  # latent contribue aussi à l'énergie DOWN (prior)
-
-        return (alpha_up * e_up + alpha_down * e_down) if weighted else (e_up + e_down)
+        if weighted:
+            return alpha_up * e_up + alpha_down * e_down
+        else:
+            return e_up + e_down
 
     # ── E-step : inférence ────────────────────────────────────────────────────
 
