@@ -12,39 +12,36 @@ from train_claude import bPC_VGG, AttrDict
 from pcn.datasets import get_CIFAR10_dataloaders, get_fmnist_dataloaders
 
 def evaluate_discrimination(model, dataloader, device, cf):
-    """
-    Évalue la classification en mode Inférence.
-    L'image est figée, le Vode du label est libéré et optimisé pour minimiser l'énergie.
-    """
     correct = 0
     total = 0
     
     print("\n--- Évaluation de la capacité de discrimination (Inférence T=100) ---")
     
-    # Même en évaluation, on ne met PAS torch.no_grad() globalement
-    # car l'inférence PC a besoin des gradients pour optimiser les états (x)
     for batch_idx, (images, labels) in enumerate(dataloader):
         images, labels = images.to(device), labels.to(device)
         batch_size = images.size(0)
         
-        # 1. Préparation des états
+        # 1. CRITIQUE : Créer le tenseur avec la dimension de batch ! [batch_size, 10]
         x_label_dummy = torch.zeros((batch_size, cf.num_labels), device=device)
         
-        # 2. Configuration stricte des "Frozen" pour la classification
+        # 2. Configuration des "Frozen"
         model.vodes[-1].frozen = True  # L'image est une observation fixe
-        model.vodes[0].frozen = False  # Le label est inconnu, on le laisse libre !
+        model.vodes[0].frozen = False  # Le label est inconnu, on le laisse libre
         
-        # 3. Initialisation Bottom-Up
+        # 3. Assigner les tenseurs AVEC LEUR DIMENSION DE BATCH aux Vodes
         model.vodes[-1].h = images
-        model.vodes[0].h = x_label_dummy
+        model.vodes[0].h = x_label_dummy  # <-- C'est cette ligne qui manquait !
+        
+        # 4. Initialisation Bottom-Up
         model.init_ff(x_label_dummy, images, is_up=True)
         
-        # Astuce : On donne au label un bon point de départ en utilisant la prédiction feedforward
+        # 5. Astuce : On donne au label la prédiction initiale feedforward
         with torch.no_grad():
-            model.compute_energy(x_label_dummy, images, weighted=True)
-            model.vodes[0].h = model.vodes[0].u.clone().detach().requires_grad_(True)
+            pred_logits = model.fc_up(model.vodes[1].h)
+            # On écrase le Vode par les vrais logits (taille [batch_size, 10])
+            model.vodes[0].h = pred_logits.clone().detach() 
             
-        # 4. Inférence (Descente d'énergie sur les états)
+        # 6. Inférence (Descente d'énergie sur les états)
         model.infer(
             x_label=model.vodes[0].h, 
             y_image=images,
@@ -55,12 +52,12 @@ def evaluate_discrimination(model, dataloader, device, cf):
             alpha_down=cf.alpha_gen
         )
         
-        # 5. Lecture de la prédiction finale
+        # 7. Lecture de la prédiction finale (le tenseur est bien 2D maintenant)
         preds = model.vodes[0].h.argmax(dim=1)
         correct += (preds == labels).sum().item()
         total += batch_size
         
-        # Verrouiller à nouveau le label par sécurité
+        # Verrouiller à nouveau le label par sécurité pour le prochain batch
         model.vodes[0].frozen = True
         
         if batch_idx % 10 == 0:
@@ -68,8 +65,6 @@ def evaluate_discrimination(model, dataloader, device, cf):
             
     accuracy = 100 * correct / total
     print(f"\n=> Précision (Accuracy) finale sur le set de validation : {accuracy:.2f}%")
-    wandb.log({"eval/accuracy": accuracy})
-
     return accuracy
 
 def plot_tsne_layers(model, dataloader, device):
