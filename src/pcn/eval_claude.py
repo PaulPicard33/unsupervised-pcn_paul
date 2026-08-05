@@ -36,6 +36,7 @@ def evaluate_discrimination(model, dataloader, device, cf):
         
         # 3. Initialisation Bottom-Up
         model.vodes[-1].h = images
+        model.vodes[0].h = x_label_dummy
         model.init_ff(x_label_dummy, images, is_up=True)
         
         # Astuce : On donne au label un bon point de départ en utilisant la prédiction feedforward

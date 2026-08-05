@@ -466,7 +466,7 @@ def main(cf):
             with torch.no_grad():
                 batch_e = bpc_model.compute_energy(
                     x_label, y_image,
-                    alpha_up=cf.alpha_gen, alpha_down=cf.alpha_disc,
+                    alpha_up=cf.alpha_disc, alpha_down=cf.alpha_gen,
                     weighted=True
                 ).item()
             total_energy += batch_e
