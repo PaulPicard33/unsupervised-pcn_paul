@@ -102,7 +102,7 @@ class bPC_VGG(nn.Module):
         self.deconv2 = nn.ConvTranspose2d(256, 128, kernel_size=3, padding=1, stride=2, output_padding=1)  # 7→14
         self.deconv1 = nn.ConvTranspose2d(128, input_channels, kernel_size=3, padding=1, stride=2, output_padding=1)  # 14→28
 
-        self.act          = nn.LeakyReLU(negative_slope=0.01)
+        self.act          = nn.GELU()
         self.out_act_down = nn.Tanh()
         # Recalculer les dims spatiales à chaque pool
         h, w = input_size
@@ -385,11 +385,30 @@ def main(cf):
     optimizer_w_latent = torch.optim.AdamW(
         params_latent, lr=cf.lr_p_latent, weight_decay=cf.weight_decay
     )
-    scheduler_w        = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer_w, T_max=cf.n_epochs, eta_min=cf.lr_p * 0.1
+    # Dans main(), juste après la création de optimizer_w et optimizer_w_latent :
+    
+    total_steps = len(datasets["train"]) * cf.n_epochs
+    
+    # Scheduler pour les poids principaux
+    scheduler_w = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer_w,
+        max_lr=cf.lr_p * 1.1,                  # Le pic à 1.1 * lr_p
+        total_steps=total_steps,               # Mise à jour à chaque batch
+        pct_start=0.1,                         # Warmup sur 10% du temps
+        div_factor=1.1,                        # Départ à (max_lr / 1.1) = lr_p
+        final_div_factor=11.0,                 # Fin à (max_lr / 11.0) = 0.1 * lr_p
+        cycle_momentum=False                   # Requis car on utilise AdamW
     )
-    scheduler_w_latent = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer_w_latent, T_max=cf.n_epochs, eta_min=cf.lr_p_latent * 0.1
+
+    # Scheduler pour les poids latents
+    scheduler_w_latent = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer_w_latent,
+        max_lr=cf.lr_p_latent * 1.1,
+        total_steps=total_steps,
+        pct_start=0.1,
+        div_factor=1.1,
+        final_div_factor=11.0,
+        cycle_momentum=False
     )
 
     print("Début de l'entraînement bPC...")
@@ -438,14 +457,15 @@ def main(cf):
 
         avg_energy = total_energy / len(datasets["train"])
         scheduler_w.step()
+        scheduler_w.step()
         scheduler_w_latent.step()
-
-        wandb.log({
-            "epoch":              epoch,
-            "train_energy_avg":   avg_energy,
-            "lr_w":               optimizer_w.param_groups[0]["lr"],
-            "lr_w_latent":        optimizer_w_latent.param_groups[0]["lr"],
-        })
+        
+        if batch_idx % cf.log_freq == 0:
+            wandb.log({
+                "batch_energy": batch_e, 
+                "lr_w": optimizer_w.param_groups[0]["lr"],
+                "lr_w_latent": optimizer_w_latent.param_groups[0]["lr"]
+            })
         print(f"Epoch [{epoch+1}/{cf.n_epochs}] — Énergie moy. : {avg_energy:.4f}")
 
     wandb.finish()

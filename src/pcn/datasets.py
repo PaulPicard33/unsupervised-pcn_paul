@@ -152,30 +152,37 @@ def get_fmnist_dataloaders(batch_size=1024, subset_size=None):
     return {"train": train_loader, "val": val_loader, "input_dim": 1024, "shape": (1, 32, 32)}
 def get_CIFAR10_dataloaders(batch_size=1024, subset_size=None):
     """
-    Charge le dataset Fashion-MNIST. 
+    Charge le dataset CIFAR-10. 
     subset_size permet de réduire drastiquement la taille pour les tests locaux.
     """
-    
-    fmnist_full = torchvision.datasets.CIFAR10(
-        root='../data_saved/cifar10', train=True, download=True,transform=transforms.Compose([
+    train_transform = transforms.Compose([
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomCrop(32, padding=4, padding_mode="reflect"),
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # Normalisation standard pour CIFAR-10
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
-    ) #
 
+    eval_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
+    cifar10_train = torchvision.datasets.CIFAR10(
+            root='../data_saved/cifar10', train=True, download=True,transform=train_transform)
+    cifar10_test = torchvision.datasets.CIFAR10(
+            root='../data_saved/cifar10', train=False, download=True,transform=eval_transform)
     # Réduction du dataset pour les tests locaux
     if subset_size is not None:
-        fmnist_full = Subset(fmnist_full, range(subset_size))
-        train_size = int(0.8 * len(fmnist_full))
-        val_size = len(fmnist_full) - train_size
+        cifar10_train = Subset(cifar10_train, range(subset_size))
+        train_size = int(0.8 * len(cifar10_train))
+        val_size = len(cifar10_train) - train_size
     else:
         # Séparation standard (50k train / 10k val)[cite: 1]
         train_size = 50000
         val_size = 10000
 
-    fmnist_train, fmnist_val = random_split(fmnist_full,[0.8,0.2]) #[cite: 1]
+    #cifar10_train, cifar10_val = random_split(cifar10_train,[0.8,0.2]) #[cite: 1]
 
-    train_loader = DataLoader(fmnist_train, batch_size=batch_size, shuffle=True) #[cite: 1]
-    val_loader = DataLoader(fmnist_val, batch_size=batch_size, shuffle=False) #[cite: 1]
+    train_loader = DataLoader(cifar10_train, batch_size=batch_size, shuffle=True) #[cite: 1]
+    val_loader = DataLoader(cifar10_test, batch_size=batch_size, shuffle=False) #[cite: 1]
 
     return {"train": train_loader, "val": val_loader, "input_dim": 1024, "shape": (1, 32, 32)}
