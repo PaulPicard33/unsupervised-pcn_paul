@@ -209,7 +209,7 @@ class bPC_VGG(nn.Module):
         u_up_4 = self.pool2(self.act(self.conv2(self.vodes[5].h)))
         u_up_3 = self.pool3(self.act(self.conv3(self.vodes[4].h)))
         u_up_2 = self.pool4(self.act(self.conv4(self.vodes[3].h)))
-        u_up_1 = self.vodes[2].h.flatten(start_dim=1)
+        u_up_1 = u_up_2.flatten(start_dim=1)
         u_up_0 = self.fc_up(self.vodes[1].h)
         u_up_lat = self.latent_layer_up(self.vodes[1].h)
 
@@ -224,7 +224,7 @@ class bPC_VGG(nn.Module):
 
         # ── PASSE DOWN (Génération) ──
         u_down_1 = self.act(self.fc_down(self.vodes[0].h) + self.latent_layer_down(self.latent_vode.h))
-        u_down_2 = self.vodes[1].h.reshape(-1, 512, self.final_h, self.final_w)
+        u_down_2 = u_down_1.reshape(-1, 512, self.final_h, self.final_w)
         u_down_3 = self.act(self.deconv4(self.vodes[2].h))
         u_down_4 = self.act(self.deconv3(self.vodes[3].h))
         u_down_5 = self.act(self.deconv2(self.vodes[4].h))
@@ -277,7 +277,7 @@ class bPC_VGG(nn.Module):
         )
         optimizer_h_latent = torch.optim.SGD(
             [self.latent_vode.h],
-            lr=lr_h_latent / alpha_down,   # scaling par 1/alpha_down (sgd_scaled)
+            lr=lr_h_latent ,   # scaling par 1/alpha_down (sgd_scaled)
             momentum=0.0
         )
 
@@ -454,10 +454,10 @@ def main(cf):
 
             if batch_idx % cf.log_freq == 0:
                 wandb.log({"batch_energy": batch_e, "epoch": epoch})
-
+            scheduler_w.step()
+            scheduler_w_latent.step()
         avg_energy = total_energy / len(datasets["train"])
-        scheduler_w.step()
-        scheduler_w_latent.step()
+        
         
         if batch_idx % cf.log_freq == 0:
             wandb.log({
