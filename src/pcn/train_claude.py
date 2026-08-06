@@ -457,7 +457,6 @@ def main(cf):
 
         avg_energy = total_energy / len(datasets["train"])
         scheduler_w.step()
-        scheduler_w.step()
         scheduler_w_latent.step()
         
         if batch_idx % cf.log_freq == 0:
