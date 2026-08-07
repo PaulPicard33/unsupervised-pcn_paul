@@ -286,7 +286,7 @@ class bPC_VGG(nn.Module):
             optimizer_h_latent.zero_grad()
 
             E = self.compute_energy(x_label, y_image, alpha_up, alpha_down, weighted=True)
-            (E/y_image.size(0)).backward()
+            E.backward()
 
             optimizer_h.step()
             optimizer_h_latent.step()
