@@ -167,7 +167,7 @@ def get_CIFAR10_dataloaders(batch_size=1024, subset_size=None):
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     cifar10_train = torchvision.datasets.CIFAR10(
-            root='../data_saved/cifar10', train=True, download=True,transform=train_transform)
+            root='../data_saved/cifar10', train=True, download=True,transform=eval_transform)
     cifar10_test = torchvision.datasets.CIFAR10(
             root='../data_saved/cifar10', train=False, download=True,transform=eval_transform)
     # Réduction du dataset pour les tests locaux
@@ -185,4 +185,4 @@ def get_CIFAR10_dataloaders(batch_size=1024, subset_size=None):
     train_loader = DataLoader(cifar10_train, batch_size=batch_size, shuffle=True) #[cite: 1]
     val_loader = DataLoader(cifar10_test, batch_size=batch_size, shuffle=False) #[cite: 1]
 
-    return {"train": train_loader, "val": val_loader, "input_dim": 1024, "shape": (1, 32, 32)}
+    return {"train": train_loader, "val": val_loader, "input_dim": 1024, "shape": (3, 32, 32)}
