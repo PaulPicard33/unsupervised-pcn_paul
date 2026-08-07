@@ -454,8 +454,8 @@ def main(cf):
 
             if batch_idx % cf.log_freq == 0:
                 wandb.log({"batch_energy": batch_e, "epoch": epoch})
-        scheduler_w.step()
-        scheduler_w_latent.step()
+            scheduler_w.step()
+            scheduler_w_latent.step()
         avg_energy = total_energy / len(datasets["train"])
         
         
