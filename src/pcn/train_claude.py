@@ -286,7 +286,7 @@ class bPC_VGG(nn.Module):
             optimizer_h_latent.zero_grad()
 
             E = self.compute_energy(x_label, y_image, alpha_up, alpha_down, weighted=True)
-            (E/y_image.size(0)).backward()
+            E.backward()
 
             optimizer_h.step()
             optimizer_h_latent.step()
@@ -418,7 +418,7 @@ def main(cf):
         total_energy = 0.0
 
         for batch_idx, (y_image, label_int) in enumerate(datasets["train"]):
-            y_image = y_image.to(device)
+            y_image= y_image.to(device)
             if label_int.ndim == 1:
                 x_label = F.one_hot(label_int, num_classes=cf.num_labels).float().to(device)
             else:
