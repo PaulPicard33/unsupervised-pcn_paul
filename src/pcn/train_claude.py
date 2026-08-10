@@ -166,14 +166,14 @@ class bPC_VGG(nn.Module):
         """
         with torch.no_grad():
             if is_up:
-                # Passe UP complète
-                z = self.act(self.pool1(self.conv1(y_image)))
+                # Passe UP complète réalignée : Conv -> Act -> Pool
+                z = self.pool1(self.act(self.conv1(y_image)))
                 self.vodes[5].h = z.clone()
-                z = self.act(self.pool2(self.conv2(z)))
+                z = self.pool2(self.act(self.conv2(z)))
                 self.vodes[4].h = z.clone()
-                z = self.act(self.pool3(self.conv3(z)))
+                z = self.pool3(self.act(self.conv3(z)))
                 self.vodes[3].h = z.clone()
-                z = self.act(self.pool4(self.conv4(z)))
+                z = self.pool4(self.act(self.conv4(z)))
                 self.vodes[2].h = z.clone()
                 z_flat = z.flatten(start_dim=1)
                 self.vodes[1].h = z_flat.clone()
