@@ -294,8 +294,6 @@ class bPC_VGG(nn.Module):
             E = self.compute_energy(x_label, y_image, alpha_up, alpha_down, weighted=True)
             E.backward()
             # Sécurité contre les falaises d'énergie
-            torch.nn.utils.clip_grad_norm_([v.h for v in self.vodes if not v.frozen], max_norm=1.0)
-            torch.nn.utils.clip_grad_norm_([self.latent_vode.h], max_norm=1.0)
             optimizer_h.step()
             optimizer_h_latent.step()
 
