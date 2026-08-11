@@ -8,6 +8,7 @@ import wandb
 from sklearn.manifold import TSNE
 
 # Import de ta nouvelle architecture et des dataloaders
+from pcn import optim
 from train_claude import bPC_VGG, AttrDict
 from pcn.datasets import get_CIFAR10_dataloaders, get_fmnist_dataloaders
 
@@ -119,6 +120,174 @@ def plot_tsne_layers(model, dataloader, device):
     print("Tracés t-SNE sauvegardés avec succès dans 'results/tsne_vodes.png' !")
     wandb.log({"eval/tsne_layers": wandb.Image(fig, caption="Espace Latent (t-SNE) par couche")}) #[cite: 6]
     plt.close(fig)
+def evaluate_generation(model, device, cf, nm_classes=10):
+    print("\n--- Évaluation de la Génération Conditionnelle ---")
+    model.eval()
+    
+    # Création des labels cibles (0 à 9)
+    labels = torch.arange(nm_classes, device=device)
+    x_label = F.one_hot(labels, num_classes=nm_classes).float()
+    
+    # L'image est libre, le label est figé
+    y_image_dummy = torch.zeros((nm_classes, 3, 32, 32), device=device)
+    model.vodes[0].frozen = True
+    model.vodes[-1].frozen = False
+    
+    # Assignation
+    model.vodes[0].h = x_label
+    model.vodes[-1].h = y_image_dummy
+    
+    # Inférence pour générer l'image depuis le label
+    model.infer(
+        x_label=x_label, 
+        y_image=y_image_dummy,
+        T=cf.infer_steps_eval,
+        lr_h=cf.lr_x_eval,
+        lr_h_latent=cf.lr_x_latent,
+        alpha_up=cf.alpha_disc,
+        alpha_down=cf.alpha_gen
+    )
+    
+    generated_images = model.vodes[-1].h.detach()
+    
+    # Affichage des 10 classes générées
+    fig, axs = plt.subplots(1, nm_classes, figsize=(15, 2))
+    imgs = generated_images.cpu().numpy() / 2 + 0.5 # Dé-normalisation
+    imgs = np.clip(np.transpose(imgs, (0, 2, 3, 1)), 0, 1)
+    
+    for i in range(nm_classes):
+        axs[i].imshow(imgs[i])
+        axs[i].set_title(f"Classe {i}")
+        axs[i].axis("off")
+    plt.savefig("results/conditional_generation.png")
+    wandb.log({"eval/conditional_generation": wandb.Image(plt, caption="Génération Conditionnelle (10 classes)")}) #[cite: 6]
+    plt.close()
+    print("Images générées sauvegardées dans 'results/conditional_generation.png'.")
+def evaluate_reconstruction(model, dataloader, device, cf):
+    print("\n--- Évaluation de la Reconstruction (MSE) ---")
+    mse_total = 0.0
+    total_images = 0
+    
+    for x_images, _ in dataloader:
+        x_images = x_images.to(device)
+        batch_size = x_images.size(0)
+        
+        # 1. Inférence UP : Trouver l'état latent de l'image
+        x_label_dummy = torch.zeros((batch_size, cf.num_labels), device=device)
+        model.vodes[-1].frozen = True
+        model.vodes[0].frozen = False
+        
+        model.vodes[-1].h = x_images
+        model.vodes[0].h = x_label_dummy
+        model.init_ff(x_label_dummy, x_images, is_up=True)
+        
+        model.infer(
+            x_label=model.vodes[0].h, y_image=x_images,
+            T=cf.infer_steps_eval, lr_h=cf.lr_x_eval, lr_h_latent=cf.lr_x_latent,
+            alpha_up=cf.alpha_disc, alpha_down=cf.alpha_gen
+        )
+        
+        # 2. Inférence DOWN : Régénérer l'image depuis l'état latent figé
+        inferred_latent = model.latent_vode.h.detach()
+        inferred_label = model.vodes[0].h.detach()
+        
+        model.vodes[0].frozen = True
+        model.latent_vode.frozen = True
+        model.vodes[-1].frozen = False
+        
+        dummy_reconstruction = torch.zeros_like(x_images)
+        model.vodes[-1].h = dummy_reconstruction
+        
+        model.infer(
+            x_label=inferred_label, y_image=dummy_reconstruction,
+            T=cf.infer_steps_eval, lr_h=cf.lr_x_eval, lr_h_latent=0.0, # Latent figé
+            alpha_up=cf.alpha_disc, alpha_down=cf.alpha_gen
+        )
+        
+        reconstructed_images = model.vodes[-1].h.detach()
+        mse_total += F.mse_loss(reconstructed_images, x_images, reduction='sum').item()
+        total_images += batch_size
+        
+        # Rétablir les états
+        model.latent_vode.frozen = False
+        
+    mse_final = mse_total / (total_images * 3 * 32 * 32)
+    print(f"MSE de reconstruction latente : {mse_final:.5f}")
+    wandb.log({"eval/reconstruction_mse": mse_final}) #[cite: 6]
+    return mse_final
+class LinearProbe(F.Module):
+    def __init__(self, rep_size, n_classes):
+        super().__init__()
+        self.lin = F.Linear(rep_size, n_classes)
+
+    def forward(self, x):
+        return self.lin(x)
+
+def evaluate_linear_probing(model, dataloader, device, cf):
+    print("\n--- Entraînement de la Sonde Linéaire (Linear Probing) ---")
+    
+    latents_list, labels_list = [], []
+    
+    # 1. Extraction des représentations (sans gradient)
+    for x_images, y_labels in dataloader:
+        x_images = x_images.to(device)
+        batch_size = x_images.size(0)
+        
+        x_label_dummy = torch.zeros((batch_size, cf.num_labels), device=device)
+        model.vodes[-1].frozen = True
+        model.vodes[0].frozen = False
+        
+        model.vodes[-1].h = x_images
+        model.vodes[0].h = x_label_dummy
+        model.init_ff(x_label_dummy, x_images, is_up=True)
+        
+        model.infer(
+            x_label=model.vodes[0].h, y_image=x_images,
+            T=cf.infer_steps_eval, lr_h=cf.lr_x_eval, lr_h_latent=cf.lr_x_latent,
+            alpha_up=cf.alpha_disc, alpha_down=cf.alpha_gen
+        )
+        
+        # On extrait l'avant-dernière couche (flatten_size) pour l'évaluer
+        latents_list.append(model.vodes[1].h.detach().cpu())
+        labels_list.append(y_labels.cpu())
+
+    X = torch.cat(latents_list)
+    Y = torch.cat(labels_list)
+    
+    # 2. Entraînement du classifieur
+    dataset = torch.utils.data.TensorDataset(X, Y)
+    probe_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True)
+    
+    probe = LinearProbe(model.flatten_size, cf.num_labels).to(device)
+    optimizer = optim.Adam(probe.parameters(), lr=0.01)
+    criterion = F.CrossEntropyLoss()
+    
+    best_acc = 0.0
+    for epoch in range(10): # 10 époques suffisent pour un modèle linéaire
+        probe.train()
+        for data, target in probe_loader:
+            data, target = data.to(device), target.to(device)
+            optimizer.zero_grad()
+            output = probe(data)
+            loss = criterion(output, target)
+            loss.backward()
+            optimizer.step()
+            
+        # Évaluation rapide
+        probe.eval()
+        correct = 0
+        with torch.no_grad():
+            for data, target in probe_loader:
+                data, target = data.to(device), target.to(device)
+                pred = probe(data).argmax(dim=1)
+                correct += (pred == target).sum().item()
+        acc = correct / len(dataset)
+        if acc > best_acc:
+            best_acc = acc
+            
+    print(f"Accuracy de décodage latent (Sonde linéaire) : {best_acc * 100:.2f}%")
+    wandb.log({"eval/linear_probe_accuracy": best_acc})
+    return best_acc
 
 def main(cf):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -157,6 +326,9 @@ def main(cf):
 
     # 1. Évaluation de l'accuracy
     evaluate_discrimination(bpc_model, val_loader, device, cf)
+    evaluate_generation(bpc_model, device, cf)
+    evaluate_reconstruction(bpc_model, val_loader, device, cf)
+    evaluate_linear_probing(bpc_model, val_loader, device, cf)
     
     # 2. t-SNE
     # On crée un petit dataloader spécifique pour le t-SNE (1000 images d'un coup)
