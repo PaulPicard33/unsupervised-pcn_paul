@@ -159,7 +159,7 @@ def evaluate_generation(model, device, cf, nm_classes=10):
         lr_h=cf.lr_x_eval,
         lr_h_latent=cf.lr_x_latent,
         alpha_up=cf.alpha_disc,
-        alpha_down=cf.alpha_gen
+        alpha_down=cf.alpha_disc #spécial pour la génération, on veut que les gradients de reconstruction soient plus forts que ceux de deiscrimination
     )
     # ... (suite du code de l'affichage matplotlib)
     

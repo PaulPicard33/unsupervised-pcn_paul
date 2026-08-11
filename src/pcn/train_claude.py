@@ -82,21 +82,18 @@ class bPC_VGG(nn.Module):
         self.final_h    = h
         self.final_w    = w
         self.flatten_size = 512 * h * w   # 512 pour fMNIST, 2048 pour CIFAR10        
-        self.fc_up = nn.Linear(self.flatten_size, output_size)
+        # ── Pipeline UP Unifié ──
+        # Remplace self.fc_up et self.latent_layer_up par :
+        self.unified_up = nn.Linear(self.flatten_size, output_size + latent_dim)
 
-        # ── Couches du latent ─────────────────────────────────────────────────
-        # Dans AddLatent :
-        #   hidden_dim = np.prod(vodes[1].shape) = flatten_size = 512
-        #   latent_layer_up   : Linear(hidden_dim → latent_dim)  [512 → 256]
-        #   latent_layer_down : Linear(latent_dim → hidden_dim)  [256 → 512]
-        self.latent_layer_up   = nn.Linear(self.flatten_size, latent_dim)
-        self.latent_layer_down = nn.Linear(latent_dim, self.flatten_size)
+        # ── Pipeline DOWN Unifié ──
+        # Remplace self.fc_down et self.latent_layer_down par :
+        self.unified_down = nn.Linear(output_size + latent_dim, self.flatten_size)
 
         # ── Pipeline DOWN (label → image) ─────────────────────────────────────
         # combination_fn_pre : fc_down(label) + latent_layer_down(latent) → vode[2]
         # Autrement dit : fc_down prend le label, latent_layer_down injecte le latent,
         # et leur somme entre dans relu → reshape → deconvolutions.
-        self.fc_down = nn.Linear(output_size, self.flatten_size)
         self.deconv4 = nn.ConvTranspose2d(512, 512, kernel_size=3, padding=1, stride=2, output_padding=1)  # 1→3
         self.deconv3 = nn.ConvTranspose2d(512, 256, kernel_size=3, padding=1, stride=2, output_padding=1)  # 3→7
         self.deconv2 = nn.ConvTranspose2d(256, 128, kernel_size=3, padding=1, stride=2, output_padding=1)  # 7→14
@@ -179,19 +176,15 @@ class bPC_VGG(nn.Module):
                 self.vodes[1].h = z_flat.clone()
                 # vode[0] est frozen (label), on ne l'initialise pas
 
-                # Initialisation du latent_vode par la passe UP
-                # latent_vode.u = latent_layer_up(hidden_flatten)
-                # latent_vode.h = u  (règle "ff" : h ← u)
-                latent_u = self.latent_layer_up(z_flat)
+                # Initialisation unifiée
+                u_top = self.unified_up(z_flat)
+                latent_u = u_top[:, self.output_size:] # On prend seulement la partie latente
                 self.latent_vode.u = latent_u.clone()
                 self.latent_vode.h = latent_u.clone()
             else:
-                # Passe DOWN : label + latent → image
-                # combination_fn_pre : fc_down(label) + latent_layer_down(latent)
-                latent = self.latent_vode.h
-                z = self.act(
-                    self.fc_down(x_label) + self.latent_layer_down(latent)
-                ).reshape(-1, 512, self.final_h, self.final_w)
+                # Passe DOWN unifiée
+                top_population = torch.cat([x_label, self.latent_vode.h], dim=1)
+                z = self.act(self.unified_down(top_population)).reshape(-1, 512, self.final_h, self.final_w)
                 self.vodes[2].h = z.clone()
                 z = self.act(self.deconv4(z))
                 self.vodes[3].h = z.clone()
@@ -205,41 +198,48 @@ class bPC_VGG(nn.Module):
     # ── Calcul d'énergie bPC ──────────────────────────────────────────────────
 
     def compute_energy(self, x_label, y_image, alpha_up=1.0, alpha_down=1.0, weighted=True):
-        # ── PASSE UP (Discrimination) ──
-        u_up_5 = self.pool1(self.act(self.conv1(self.vodes[-1].h)))
-        u_up_4 = self.pool2(self.act(self.conv2(self.vodes[5].h)))
-        u_up_3 = self.pool3(self.act(self.conv3(self.vodes[4].h)))
-        u_up_2 = self.pool4(self.act(self.conv4(self.vodes[3].h)))
-        u_up_1 = self.vodes[2].h.flatten(start_dim=1)
-        u_up_0 = self.fc_up(self.vodes[1].h)
-        u_up_lat = self.latent_layer_up(self.vodes[1].h)
+        
+        # 1. Création de la population 1D unique à la volée
+        top_population = torch.cat([self.vodes[0].h, self.latent_vode.h], dim=1)
+        
+        # ── PASSE UP ──
+        u_up_4 = self.pool1(self.act(self.conv1(self.vodes[-1].h)))
+        u_up_3 = self.pool2(self.act(self.conv2(self.vodes[4].h)))
+        u_up_2 = self.pool3(self.act(self.conv3(self.vodes[3].h)))
+        u_up_1_flat = self.pool4(self.act(self.conv4(self.vodes[2].h))).flatten(start_dim=1)
+        
+        # Prédiction unifiée séparée à la volée
+        u_up_top = self.unified_up(u_up_1_flat)
+        u_up_label = u_up_top[:, :self.output_size]
+        u_up_latent = u_up_top[:, self.output_size:]
 
         e_up = 0.0
-        e_up += 0.5 * ((self.vodes[5].h - u_up_5) ** 2).sum()
         e_up += 0.5 * ((self.vodes[4].h - u_up_4) ** 2).sum()
         e_up += 0.5 * ((self.vodes[3].h - u_up_3) ** 2).sum()
         e_up += 0.5 * ((self.vodes[2].h - u_up_2) ** 2).sum()
-        e_up += 0.5 * ((self.vodes[1].h - u_up_1) ** 2).sum()
-        e_up += 0.5 * ((self.vodes[0].h - u_up_0) ** 2).sum() # L'énergie du label pour les poids !
-        e_up += 0.5 * ((self.latent_vode.h - u_up_lat) ** 2).sum() / self.latent_var
+        
+        # Énergie des labels
+        e_up += 0.5 * ((self.vodes[0].h - u_up_label) ** 2).sum() 
+        # Énergie du latent (pondérée par la variance)
+        e_up += 0.5 * ((self.latent_vode.h - u_up_latent) ** 2).sum() / self.latent_var
 
-        # ── PASSE DOWN (Génération) ──
-        u_down_1 = self.act(self.fc_down(self.vodes[0].h) + self.latent_layer_down(self.latent_vode.h))
-        u_down_2 = self.vodes[1].h.reshape(-1, 512, self.final_h, self.final_w)
-        u_down_3 = self.act(self.deconv4(self.vodes[2].h))
-        u_down_4 = self.act(self.deconv3(self.vodes[3].h))
-        u_down_5 = self.act(self.deconv2(self.vodes[4].h))
-        u_down_img = self.out_act_down(self.deconv1(self.vodes[5].h))
+        # ── PASSE DOWN ──
+        # La passe descendante exploite enfin la synergie totale !
+        u_down_1_flat = self.act(self.unified_down(top_population))
+        u_down_1 = u_down_1_flat.reshape(-1, 512, self.final_h, self.final_w)
+        
+        u_down_2 = self.act(self.deconv4(self.vodes[1].h))
+        u_down_3 = self.act(self.deconv3(self.vodes[2].h))
+        u_down_4 = self.act(self.deconv2(self.vodes[3].h))
+        u_down_img = self.out_act_down(self.deconv1(self.vodes[4].h))
 
         e_down = 0.0
         e_down += 0.5 * ((self.vodes[1].h - u_down_1) ** 2).sum()
         e_down += 0.5 * ((self.vodes[2].h - u_down_2) ** 2).sum()
         e_down += 0.5 * ((self.vodes[3].h - u_down_3) ** 2).sum()
         e_down += 0.5 * ((self.vodes[4].h - u_down_4) ** 2).sum()
-        e_down += 0.5 * ((self.vodes[5].h - u_down_5) ** 2).sum()
-        e_down += 0.5 * ((self.vodes[-1].h - u_down_img) ** 2).sum() # L'énergie de l'image pour les poids !
+        e_down += 0.5 * ((self.vodes[-1].h - u_down_img) ** 2).sum() 
         
-        # Prior latent : la cible de la passe descendante pour le latent est toujours 0
         e_down += 0.5 * ((self.latent_vode.h - 0.0) ** 2).sum() / 1.0
 
         if weighted:
