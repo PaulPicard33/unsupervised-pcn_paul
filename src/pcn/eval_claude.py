@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
 import matplotlib.pyplot as plt
 import os
 import argparse
@@ -215,10 +216,10 @@ def evaluate_reconstruction(model, dataloader, device, cf):
     print(f"MSE de reconstruction latente : {mse_final:.5f}")
     wandb.log({"eval/reconstruction_mse": mse_final}) #[cite: 6]
     return mse_final
-class LinearProbe(F.Module):
+class LinearProbe(nn.Module):
     def __init__(self, rep_size, n_classes):
         super().__init__()
-        self.lin = F.Linear(rep_size, n_classes)
+        self.lin = nn.Linear(rep_size, n_classes)
 
     def forward(self, x):
         return self.lin(x)
