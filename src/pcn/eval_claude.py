@@ -275,7 +275,7 @@ def evaluate_linear_probing(model, dataloader, device, cf):
     
     probe = LinearProbe(model.flatten_size, cf.num_labels).to(device)
     optimizer = torch.optim.Adam(probe.parameters(), lr=0.01)
-    criterion = F.CrossEntropyLoss()
+    criterion = torch.nn.CrossEntropyLoss()
     
     best_acc = 0.0
     for epoch in range(10): # 10 époques suffisent pour un modèle linéaire
