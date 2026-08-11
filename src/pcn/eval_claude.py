@@ -274,7 +274,7 @@ def evaluate_linear_probing(model, dataloader, device, cf):
     probe_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True)
     
     probe = LinearProbe(model.flatten_size, cf.num_labels).to(device)
-    optimizer = optim.Adam(probe.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(probe.parameters(), lr=0.01)
     criterion = F.CrossEntropyLoss()
     
     best_acc = 0.0
