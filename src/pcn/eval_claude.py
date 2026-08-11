@@ -137,6 +137,7 @@ def evaluate_generation(model, device, cf, nm_classes=10):
     # Assignation
     model.vodes[0].h = x_label
     model.vodes[-1].h = y_image_dummy
+    model.latent_vode.h = torch.zeros((nm_classes, cf.latent_dim), device=device)
     model.init_ff(x_label, y_image_dummy, is_up=False)
     # Inférence pour générer l'image depuis le label
     model.infer(
