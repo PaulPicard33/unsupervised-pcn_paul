@@ -128,17 +128,29 @@ def evaluate_generation(model, device, cf, nm_classes=10):
     # Création des labels cibles (0 à 9)
     labels = torch.arange(nm_classes, device=device)
     x_label = F.one_hot(labels, num_classes=nm_classes).float()
-    
-    # L'image est libre, le label est figé
     y_image_dummy = torch.zeros((nm_classes, 3, 32, 32), device=device)
+
+    # -------------------------------------------------------------
+    # LE "HARD RESET" : On écrase tous les états avec la taille 10
+    # -------------------------------------------------------------
+    for v in model.vodes:
+        # On garde les dimensions spatiales [1:], mais on force le batch à nm_classes
+        v.h = torch.zeros((nm_classes, *v.h.shape[1:]), device=device)
+        v.u = torch.zeros((nm_classes, *v.u.shape[1:]), device=device)
+        
+    model.latent_vode.h = torch.zeros((nm_classes, cf.latent_dim), device=device)
+    model.latent_vode.u = torch.zeros((nm_classes, cf.latent_dim), device=device)
+
+    # Assignation des extrémités
+    model.vodes[0].h = x_label
+    model.vodes[-1].h = y_image_dummy
+    
     model.vodes[0].frozen = True
     model.vodes[-1].frozen = False
     
-    # Assignation
-    model.vodes[0].h = x_label
-    model.vodes[-1].h = y_image_dummy
-    model.latent_vode.h = torch.zeros((nm_classes, cf.latent_dim), device=device)
+    # Maintenant, l'initialisation peut s'exécuter sur un terrain parfaitement propre
     model.init_ff(x_label, y_image_dummy, is_up=False)
+
     # Inférence pour générer l'image depuis le label
     model.infer(
         x_label=x_label, 
@@ -149,6 +161,7 @@ def evaluate_generation(model, device, cf, nm_classes=10):
         alpha_up=cf.alpha_disc,
         alpha_down=cf.alpha_gen
     )
+    # ... (suite du code de l'affichage matplotlib)
     
     generated_images = model.vodes[-1].h.detach()
     
