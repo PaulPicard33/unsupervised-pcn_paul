@@ -200,12 +200,7 @@ class bPC_VGG(nn.Module):
                 z = self.act(self.deconv2(z))
                 self.vodes[5].h = z.clone()
                 # vode[-1] est frozen (image)
-        # À rajouter dans le __init__ de bPC_VGG, tout à la fin :
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
-                nn.init.xavier_normal_(m.weight)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
+        
 
     # ── Calcul d'énergie bPC ──────────────────────────────────────────────────
 
@@ -384,7 +379,7 @@ def main(cf):
     }
     params_main   = [p for p in bpc_model.parameters() if id(p) not in latent_param_ids]
     params_latent = [p for p in bpc_model.parameters() if id(p)     in latent_param_ids]
-    """
+    
     # Dans main(), lors de la création des optimiseurs :
     decay_params_main = []
     no_decay_params_main = []
@@ -400,8 +395,8 @@ def main(cf):
     optimizer_w = torch.optim.AdamW([
         {'params': decay_params_main, 'weight_decay': cf.weight_decay},
         {'params': no_decay_params_main, 'weight_decay': 0.0}
-    ], lr=cf.lr_p) """
-    optimizer_w = torch.optim.AdamW(params_main, lr=cf.lr_p, weight_decay=cf.weight_decay)     
+    ], lr=cf.lr_p)
+    #optimizer_w = torch.optim.AdamW(params_main, lr=cf.lr_p, weight_decay=cf.weight_decay)     
     optimizer_w_latent = torch.optim.AdamW(
         params_latent, lr=cf.lr_p_latent, weight_decay=cf.weight_decay
     )
