@@ -31,7 +31,33 @@ class Vode:
         self.h = self.h.to(device)
         self.u = self.u.to(device)
         return self
+class UnifiedUp(nn.Module):
+    def __init__(self, in_features, size_label, size_latent):
+        super().__init__()
+        # Deux matrices séparées pour préserver tes deux learning rates
+        self.fc_label = nn.Linear(in_features, size_label)
+        self.fc_latent = nn.Linear(in_features, size_latent)
 
+    def forward(self, x):
+        # Le graphe génère une sortie 1D à population unique (taille 266)
+        out_label = self.fc_label(x)
+        out_latent = self.fc_latent(x)
+        return torch.cat([out_label, out_latent], dim=1)
+
+
+class UnifiedDown(nn.Module):
+    def __init__(self, size_label, size_latent, out_features):
+        super().__init__()
+        self.size_label = size_label
+        # Deux matrices séparées (un seul biais suffit pour la somme)
+        self.fc_label = nn.Linear(size_label, out_features)
+        self.fc_latent = nn.Linear(size_latent, out_features, bias=False)
+
+    def forward(self, pop_1d):
+        # Le graphe reçoit une entrée 1D à population unique (taille 266)
+        x_label = pop_1d[:, :self.size_label]
+        x_latent = pop_1d[:, self.size_label:]
+        return self.fc_label(x_label) + self.fc_latent(x_latent)
 
 # =============================================================================
 # MODÈLE bPC VGG5 avec neurones libres (AddLatent)
@@ -82,13 +108,9 @@ class bPC_VGG(nn.Module):
         self.final_h    = h
         self.final_w    = w
         self.flatten_size = 512 * h * w   # 512 pour fMNIST, 2048 pour CIFAR10        
-        # ── Pipeline UP Unifié ──
-        # Remplace self.fc_up et self.latent_layer_up par :
-        self.unified_up = nn.Linear(self.flatten_size, output_size + latent_dim)
-
-        # ── Pipeline DOWN Unifié ──
-        # Remplace self.fc_down et self.latent_layer_down par :
-        self.unified_down = nn.Linear(output_size + latent_dim, self.flatten_size)
+        # ── Pipeline UP & DOWN Unifiés ──
+        self.unified_up = UnifiedUp(self.flatten_size, output_size, latent_dim)
+        self.unified_down = UnifiedDown(output_size, latent_dim, self.flatten_size)
 
         # ── Pipeline DOWN (label → image) ─────────────────────────────────────
         # combination_fn_pre : fc_down(label) + latent_layer_down(latent) → vode[2]
@@ -376,9 +398,10 @@ def main(cf):
     # Même séparation que train_cnn_pcax.py :
     #   optim_w       → toutes les couches SAUF latent_layer_up/down  (lr_p)
     #   optim_w_latent→ latent_layer_up + latent_layer_down           (lr_p_latent)
+    # ── Optimiseurs des POIDS ──
     latent_param_ids = {
-        id(p) for p in list(bpc_model.latent_layer_up.parameters())
-                      + list(bpc_model.latent_layer_down.parameters())
+        id(p) for p in list(bpc_model.unified_up.fc_latent.parameters())
+                      + list(bpc_model.unified_down.fc_latent.parameters())
     }
     params_main   = [p for p in bpc_model.parameters() if id(p) not in latent_param_ids]
     params_latent = [p for p in bpc_model.parameters() if id(p)     in latent_param_ids]
