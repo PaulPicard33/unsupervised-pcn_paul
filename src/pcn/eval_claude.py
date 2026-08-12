@@ -369,8 +369,8 @@ def main(cf):
         print("ATTENTION: Aucun chemin valide fourni, évaluation sur poids aléatoires !")
 
     # 1. Évaluation de l'accuracy
-    evaluate_discrimination(bpc_model, val_loader, device, cf)
     evaluate_generation(bpc_model, device, cf)
+    """ evaluate_discrimination(bpc_model, val_loader, device, cf)
     evaluate_reconstruction(bpc_model, val_loader, device, cf)
     evaluate_linear_probing(bpc_model, val_loader, device, cf)
     
@@ -382,7 +382,7 @@ def main(cf):
         tsne_dataset = get_CIFAR10_dataloaders(batch_size=1000, subset_size=1000)
         
     torch.cuda.empty_cache()
-    plot_tsne_layers(bpc_model, tsne_dataset["val"], device)
+    plot_tsne_layers(bpc_model, tsne_dataset["val"], device) """
     wandb.finish()  # Clôture de la session WandB
 
 if __name__ == "__main__":

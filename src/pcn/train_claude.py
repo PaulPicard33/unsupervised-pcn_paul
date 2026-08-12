@@ -312,6 +312,9 @@ class bPC_VGG(nn.Module):
 
             E = self.compute_energy(x_label, y_image, alpha_up, alpha_down, weighted=True)
             E.backward()
+            print("Gradient sur l'image :", self.vodes[-1].h.grad)
+            print("L'image requiert le gradient ?", self.vodes[-1].h.requires_grad)
+            print("L'image est-elle figée ?", self.vodes[-1].frozen)
             # Sécurité contre les falaises d'énergie
             torch.nn.utils.clip_grad_norm_([v.h for v in self.vodes if not v.frozen], max_norm=1.0)
             torch.nn.utils.clip_grad_norm_([self.latent_vode.h], max_norm=1.0)
