@@ -179,43 +179,42 @@ class bPC_VGG(nn.Module):
     # ── Passe feedforward (initialisation) ────────────────────────────────────
 
     def init_ff(self, x_label, y_image, is_up=True):
-        """
-        Initialise h de tous les Vodes intermédiaires + latent_vode.
-        is_up=True (défaut pcax) : image → label → latent extrait en parallèle.
-        """
         with torch.no_grad():
             if is_up:
-                # Passe UP complète réalignée : Conv -> Act -> Pool
+                # Passe UP complète avec les bons indices (4 à 1)
                 z = self.pool1(self.act(self.conv1(y_image)))
-                self.vodes[5].h = z.clone()
-                z = self.pool2(self.act(self.conv2(z)))
                 self.vodes[4].h = z.clone()
-                z = self.pool3(self.act(self.conv3(z)))
+                
+                z = self.pool2(self.act(self.conv2(z)))
                 self.vodes[3].h = z.clone()
-                z = self.pool4(self.act(self.conv4(z)))
+                
+                z = self.pool3(self.act(self.conv3(z)))
                 self.vodes[2].h = z.clone()
+                
+                z = self.pool4(self.act(self.conv4(z)))
+                self.vodes[1].h = z.clone()
+                
                 z_flat = z.flatten(start_dim=1)
-                self.vodes[1].h = z_flat.clone()
-                # vode[0] est frozen (label), on ne l'initialise pas
-
-                # Initialisation unifiée
+                
+                # Initialisation unifiée du sommet
                 u_top = self.unified_up(z_flat)
-                latent_u = u_top[:, self.output_size:] # On prend seulement la partie latente
+                latent_u = u_top[:, self.output_size:]
                 self.latent_vode.u = latent_u.clone()
                 self.latent_vode.h = latent_u.clone()
             else:
-                # Passe DOWN unifiée
+                # Passe DOWN unifiée avec les bons indices (1 à 4)
                 top_population = torch.cat([x_label, self.latent_vode.h], dim=1)
                 z = self.act(self.unified_down(top_population)).reshape(-1, 512, self.final_h, self.final_w)
-                self.vodes[2].h = z.clone()
+                self.vodes[1].h = z.clone()
+                
                 z = self.act(self.deconv4(z))
-                self.vodes[3].h = z.clone()
+                self.vodes[2].h = z.clone()
+                
                 z = self.act(self.deconv3(z))
-                self.vodes[4].h = z.clone()
+                self.vodes[3].h = z.clone()
+                
                 z = self.act(self.deconv2(z))
-                self.vodes[5].h = z.clone()
-                # vode[-1] est frozen (image)
-        
+                self.vodes[4].h = z.clone()
 
     # ── Calcul d'énergie bPC ──────────────────────────────────────────────────
 
