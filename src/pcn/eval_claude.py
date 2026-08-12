@@ -9,10 +9,11 @@ import wandb
 from sklearn.manifold import TSNE
 
 # Import de ta nouvelle architecture et des dataloaders
-from pcn import optim
 from train_claude import bPC_VGG, AttrDict
 from pcn.datasets import get_CIFAR10_dataloaders, get_fmnist_dataloaders
-
+import os
+print("\n--- État du GPU SLURM au lancement ---")
+os.system("nvidia-smi")
 def evaluate_discrimination(model, dataloader, device, cf):
     correct = 0
     total = 0
@@ -135,9 +136,7 @@ def plot_tsne_layers(model, dataloader, device, num_samples=1000):
     layers_dict = {k: np.concatenate(v, axis=0) for k, v in layers_data.items()}
     labels = np.concatenate(labels_list, axis=0)
     
-    # 6. Calcul du t-SNE (sur le CPU)
-    from sklearn.manifold import TSNE
-    import matplotlib.pyplot as plt
+    
     
     fig, axs = plt.subplots(1, len(layers_dict), figsize=(25, 5))
     fig.suptitle('Projections t-SNE des Vodes après apprentissage (Single-Population 1D)', fontsize=16)
