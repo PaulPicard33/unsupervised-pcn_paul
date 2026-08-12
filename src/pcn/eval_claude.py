@@ -39,7 +39,7 @@ def evaluate_discrimination(model, dataloader, device, cf):
         
         # 5. Astuce : On donne au label la prédiction initiale feedforward
         with torch.no_grad():
-            pred_logits = model.fc_up(model.vodes[1].h)
+            pred_logits = model.unified_up.fc_label(model.vodes[1].h.flatten(start_dim=1))
             # On écrase le Vode par les vrais logits (taille [batch_size, 10])
             model.vodes[0].h = pred_logits.clone().detach() 
             
@@ -125,33 +125,27 @@ def evaluate_generation(model, device, cf, nm_classes=10):
     print("\n--- Évaluation de la Génération Conditionnelle ---")
     model.eval()
     
-    # Création des labels cibles (0 à 9)
     labels = torch.arange(nm_classes, device=device)
     x_label = F.one_hot(labels, num_classes=nm_classes).float()
     y_image_dummy = torch.zeros((nm_classes, 3, 32, 32), device=device)
 
-    # -------------------------------------------------------------
-    # LE "HARD RESET" : On écrase tous les états avec la taille 10
-    # -------------------------------------------------------------
+    # 1. HARD RESET : On force tout le réseau à la taille nm_classes (10)
     for v in model.vodes:
-        # On garde les dimensions spatiales [1:], mais on force le batch à nm_classes
         v.h = torch.zeros((nm_classes, *v.h.shape[1:]), device=device)
         v.u = torch.zeros((nm_classes, *v.u.shape[1:]), device=device)
         
     model.latent_vode.h = torch.zeros((nm_classes, cf.latent_dim), device=device)
     model.latent_vode.u = torch.zeros((nm_classes, cf.latent_dim), device=device)
 
-    # Assignation des extrémités
+    # 2. Assignation
     model.vodes[0].h = x_label
     model.vodes[-1].h = y_image_dummy
-    
     model.vodes[0].frozen = True
     model.vodes[-1].frozen = False
     
-    # Maintenant, l'initialisation peut s'exécuter sur un terrain parfaitement propre
     model.init_ff(x_label, y_image_dummy, is_up=False)
 
-    # Inférence pour générer l'image depuis le label
+    # 3. Inférence générative (L'énergie descendante est débridée !)
     model.infer(
         x_label=x_label, 
         y_image=y_image_dummy,
@@ -159,15 +153,13 @@ def evaluate_generation(model, device, cf, nm_classes=10):
         lr_h=cf.lr_x_eval,
         lr_h_latent=cf.lr_x_latent,
         alpha_up=cf.alpha_disc,
-        alpha_down=cf.alpha_disc #spécial pour la génération, on veut que les gradients de reconstruction soient plus forts que ceux de deiscrimination
+        alpha_down=1.0  # <--- CHANGEMENT CRITIQUE : Remplace cf.alpha_gen pour libérer les pixels
     )
-    # ... (suite du code de l'affichage matplotlib)
     
     generated_images = model.vodes[-1].h.detach()
     
-    # Affichage des 10 classes générées
     fig, axs = plt.subplots(1, nm_classes, figsize=(15, 2))
-    imgs = generated_images.cpu().numpy() / 2 + 0.5 # Dé-normalisation
+    imgs = generated_images.cpu().numpy() / 2 + 0.5
     imgs = np.clip(np.transpose(imgs, (0, 2, 3, 1)), 0, 1)
     
     for i in range(nm_classes):
@@ -175,9 +167,8 @@ def evaluate_generation(model, device, cf, nm_classes=10):
         axs[i].set_title(f"Classe {i}")
         axs[i].axis("off")
     plt.savefig("results/conditional_generation.png")
-    wandb.log({"eval/conditional_generation": wandb.Image(plt, caption="Génération Conditionnelle (10 classes)")}) #[cite: 6]
+    wandb.log({"eval/conditional_generation": wandb.Image(plt, caption="Génération Conditionnelle par Classe")}) #[cite: 6]
     plt.close()
-    print("Images générées sauvegardées dans 'results/conditional_generation.png'.")
 def evaluate_reconstruction(model, dataloader, device, cf):
     print("\n--- Évaluation de la Reconstruction (MSE) ---")
     mse_total = 0.0
@@ -199,7 +190,7 @@ def evaluate_reconstruction(model, dataloader, device, cf):
         model.infer(
             x_label=model.vodes[0].h, y_image=x_images,
             T=cf.infer_steps_eval, lr_h=cf.lr_x_eval, lr_h_latent=cf.lr_x_latent,
-            alpha_up=cf.alpha_disc, alpha_down=cf.alpha_gen
+            alpha_up=cf.alpha_disc, alpha_down=cf.alpha_disc
         )
         
         # 2. Inférence DOWN : Régénérer l'image depuis l'état latent figé
@@ -263,7 +254,7 @@ def evaluate_linear_probing(model, dataloader, device, cf):
         )
         
         # On extrait l'avant-dernière couche (flatten_size) pour l'évaluer
-        latents_list.append(model.vodes[1].h.detach().cpu())
+        latents_list.append(model.vodes[1].h.flatten(start_dim=1).detach().cpu())
         labels_list.append(y_labels.cpu())
 
     X = torch.cat(latents_list)
