@@ -215,6 +215,9 @@ class bPC_VGG(nn.Module):
                 
                 z = self.act(self.deconv2(z))
                 self.vodes[4].h = z.clone()
+                # --- LA CORRECTION : Calcul de l'image ---
+                z_img = self.out_act_down(self.deconv1(z))
+                self.vodes[-1].h = z_img.clone()
 
     # ── Calcul d'énergie bPC ──────────────────────────────────────────────────
 
