@@ -362,6 +362,9 @@ def main(cf):
     # Chargement des poids
     if cf.model_path and os.path.exists(cf.model_path):
         bpc_model.load_state_dict(torch.load(cf.model_path, map_location=device))
+        # OPTIMISATION : On gèle les poids pour ne pas accumuler de gradients inutiles
+        for param in bpc_model.parameters():
+            param.requires_grad = False
         print(f"Poids chargés avec succès depuis : {cf.model_path}")
     else:
         print("ATTENTION: Aucun chemin valide fourni, évaluation sur poids aléatoires !")
@@ -379,6 +382,7 @@ def main(cf):
     else:
         tsne_dataset = get_CIFAR10_dataloaders(batch_size=1000, subset_size=1000)
         
+    torch.cuda.empty_cache()
     plot_tsne_layers(bpc_model, tsne_dataset["val"], device)
     wandb.finish()  # Clôture de la session WandB
 
