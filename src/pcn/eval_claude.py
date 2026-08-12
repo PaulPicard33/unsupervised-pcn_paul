@@ -69,45 +69,69 @@ def evaluate_discrimination(model, dataloader, device, cf):
     print(f"\n=> Précision (Accuracy) finale sur le set de validation : {accuracy:.2f}%")
     return accuracy
 
-def plot_tsne_layers(model, dataloader, device):
-    """
-    Extrait les représentations de chaque Vode et projette l'espace latent en 2D via t-SNE.
-    """
-    print("\n--- Calcul des projections t-SNE pour l'analyse des Vodes ---")
+def plot_tsne_layers(model, dataloader, device, num_samples=1000):
+    print(f"\n--- Calcul des projections t-SNE pour l'analyse des Vodes ({num_samples} images) ---")
+    model.eval()
     
-    # On récupère un gros batch (ex: 1000 images)
-    images, labels = next(iter(dataloader))
-    images = images.to(device)
-    labels_np = labels.numpy()
+    # 1. Extraction d'un subset pour le t-SNE
+    images_list, labels_list = [], []
+    samples_collected = 0
+    for x, y in dataloader:
+        images_list.append(x)
+        labels_list.append(y)
+        samples_collected += x.size(0)
+        if samples_collected >= num_samples:
+            break
+            
+    images = torch.cat(images_list)[:num_samples].to(device)
+    labels = torch.cat(labels_list)[:num_samples].cpu().numpy()
     
-    # Passe ascendante pour remplir les Vodes
-    x_label_dummy = torch.zeros((images.size(0), model.output_size), device=device)
-    model.vodes[-1].h = images
-    
-    with torch.no_grad():
-        model.init_ff(x_label_dummy, images, is_up=True)
+    # 2. HARD RESET des mémoires du modèle à la taille num_samples
+    for v in model.vodes:
+        v.h = torch.zeros((num_samples, *v.h.shape[1:]), device=device)
+        v.u = torch.zeros((num_samples, *v.u.shape[1:]), device=device)
         
-        # Dictionnaire des couches à visualiser
-        layers_data = {
-            'Latent 256 (Libre)': model.latent_vode.h.view(images.size(0), -1).cpu().numpy(),
-            'Vode 1 (Flatten 512)': model.vodes[1].h.view(images.size(0), -1).cpu().numpy(),
-            'Vode 2 (Post Conv4)': model.vodes[2].h.view(images.size(0), -1).cpu().numpy(),
-            'Vode 3 (Post Conv3)': model.vodes[3].h.view(images.size(0), -1).cpu().numpy(),
-            'Vode 4 (Post Conv2)': model.vodes[4].h.view(images.size(0), -1).cpu().numpy(),
-            'Vode 5 (Post Conv1)': model.vodes[5].h.view(images.size(0), -1).cpu().numpy(),
-        }
+    model.latent_vode.h = torch.zeros((num_samples, model.latent_dim), device=device)
+    model.latent_vode.u = torch.zeros((num_samples, model.latent_dim), device=device)
 
+    # 3. Inférence pour extraire les représentations
+    x_label_dummy = torch.zeros((num_samples, model.output_size), device=device)
+    model.vodes[-1].frozen = True
+    model.vodes[0].frozen = False
+    
+    model.vodes[-1].h = images
+    model.vodes[0].h = x_label_dummy
+    
+    model.init_ff(x_label_dummy, images, is_up=True)
+    
+    # On utilise infer avec les hyperparamètres standard (à ajuster si besoin)
+    model.infer(
+        x_label=model.vodes[0].h, y_image=images,
+        T=32, lr_h=0.0019, lr_h_latent=0.0031,
+        alpha_up=1.0, alpha_down=1e-7
+    )
+    
+    # 4. Le bon dictionnaire avec les indices décalés (1 à 4)
+    layers_dict = {
+        'Espace Latent 256': model.latent_vode.h.detach().cpu().numpy(),
+        'Vode 1 (Post Conv4)': model.vodes[1].h.flatten(start_dim=1).detach().cpu().numpy(),
+        'Vode 2 (Post Conv3)': model.vodes[2].h.flatten(start_dim=1).detach().cpu().numpy(),
+        'Vode 3 (Post Conv2)': model.vodes[3].h.flatten(start_dim=1).detach().cpu().numpy(),
+        'Vode 4 (Post Conv1)': model.vodes[4].h.flatten(start_dim=1).detach().cpu().numpy(),
+    }
+    
+    # ... (Suite du code avec TSNE(n_components=2) et l'affichage matplotlib)
     fig, axes = plt.subplots(2, 3, figsize=(18, 10))
     axes = axes.flatten()
     
-    for i, (name, data) in enumerate(layers_data.items()):
+    for i, (name, data) in enumerate(layers_dict.items()):
         print(f"Génération t-SNE pour {name}...")
         tsne = TSNE(n_components=2, random_state=42, init='pca', learning_rate='auto')
         tsne_results = tsne.fit_transform(data)
         
         scatter = axes[i].scatter(
             tsne_results[:, 0], tsne_results[:, 1], 
-            c=labels_np, cmap='tab10', s=15, alpha=0.8
+            c=labels, cmap='tab10', s=15, alpha=0.8
         )
         axes[i].set_title(f"Espace : {name}")
         axes[i].axis('off')
@@ -262,8 +286,9 @@ def evaluate_linear_probing(model, dataloader, device, cf):
     
     # 2. Entraînement du classifieur
     dataset = torch.utils.data.TensorDataset(X, Y)
-    probe_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True)
-    
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [int(0.8 * len(dataset)), len(dataset) - int(0.8 * len(dataset))])
+    probe_loader = torch.utils.data.DataLoader(train_dataset, batch_size=128, shuffle=True)
+    probe_val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=128, shuffle=False)
     probe = LinearProbe(model.flatten_size, cf.num_labels).to(device)
     optimizer = torch.optim.Adam(probe.parameters(), lr=0.01)
     criterion = torch.nn.CrossEntropyLoss()
@@ -283,11 +308,11 @@ def evaluate_linear_probing(model, dataloader, device, cf):
         probe.eval()
         correct = 0
         with torch.no_grad():
-            for data, target in probe_loader:
+            for data, target in probe_val_loader:
                 data, target = data.to(device), target.to(device)
                 pred = probe(data).argmax(dim=1)
                 correct += (pred == target).sum().item()
-        acc = correct / len(dataset)
+        acc = correct / len(val_dataset)
         if acc > best_acc:
             best_acc = acc
             
