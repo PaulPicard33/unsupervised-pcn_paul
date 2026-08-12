@@ -73,78 +73,89 @@ def plot_tsne_layers(model, dataloader, device, num_samples=1000):
     print(f"\n--- Calcul des projections t-SNE pour l'analyse des Vodes ({num_samples} images) ---")
     model.eval()
     
-    # 1. Extraction d'un subset pour le t-SNE
-    images_list, labels_list = [], []
+    # Dictionnaires pour stocker les résultats sur le CPU
+    layers_data = {
+        'Espace Latent 256': [],
+        'Vode 1 (Post Conv4)': [],
+        'Vode 2 (Post Conv3)': [],
+        'Vode 3 (Post Conv2)': [],
+        'Vode 4 (Post Conv1)': []
+    }
+    labels_list = []
     samples_collected = 0
+
+    # 1. Traitement par petits batchs pour économiser la VRAM
     for x, y in dataloader:
-        images_list.append(x)
-        labels_list.append(y)
-        samples_collected += x.size(0)
         if samples_collected >= num_samples:
             break
             
-    images = torch.cat(images_list)[:num_samples].to(device)
-    labels = torch.cat(labels_list)[:num_samples].cpu().numpy()
-    
-    # 2. HARD RESET des mémoires du modèle à la taille num_samples
-    for v in model.vodes:
-        v.h = torch.zeros((num_samples, *v.h.shape[1:]), device=device)
-        v.u = torch.zeros((num_samples, *v.u.shape[1:]), device=device)
-        
-    model.latent_vode.h = torch.zeros((num_samples, model.latent_dim), device=device)
-    model.latent_vode.u = torch.zeros((num_samples, model.latent_dim), device=device)
+        # Si le batch dépasse la limite restante, on le coupe
+        batch_size = x.size(0)
+        if samples_collected + batch_size > num_samples:
+            x = x[:num_samples - samples_collected]
+            y = y[:num_samples - samples_collected]
+            batch_size = x.size(0)
+            
+        x = x.to(device)
 
-    # 3. Inférence pour extraire les représentations
-    x_label_dummy = torch.zeros((num_samples, model.output_size), device=device)
-    model.vodes[-1].frozen = True
-    model.vodes[0].frozen = False
-    
-    model.vodes[-1].h = images
-    model.vodes[0].h = x_label_dummy
-    
-    model.init_ff(x_label_dummy, images, is_up=True)
-    
-    # On utilise infer avec les hyperparamètres standard (à ajuster si besoin)
-    model.infer(
-        x_label=model.vodes[0].h, y_image=images,
-        T=32, lr_h=0.0019, lr_h_latent=0.0031,
-        alpha_up=1.0, alpha_down=1e-7
-    )
-    
-    # 4. Le bon dictionnaire avec les indices décalés (1 à 4)
-    layers_dict = {
-        'Espace Latent 256': model.latent_vode.h.detach().cpu().numpy(),
-        'Vode 1 (Post Conv4)': model.vodes[1].h.flatten(start_dim=1).detach().cpu().numpy(),
-        'Vode 2 (Post Conv3)': model.vodes[2].h.flatten(start_dim=1).detach().cpu().numpy(),
-        'Vode 3 (Post Conv2)': model.vodes[3].h.flatten(start_dim=1).detach().cpu().numpy(),
-        'Vode 4 (Post Conv1)': model.vodes[4].h.flatten(start_dim=1).detach().cpu().numpy(),
-    }
-    
-    # ... (Suite du code avec TSNE(n_components=2) et l'affichage matplotlib)
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    axes = axes.flatten()
-    
-    for i, (name, data) in enumerate(layers_dict.items()):
-        print(f"Génération t-SNE pour {name}...")
-        tsne = TSNE(n_components=2, random_state=42, init='pca', learning_rate='auto')
-        tsne_results = tsne.fit_transform(data)
+        # 2. HARD RESET des mémoires à la taille du mini-batch en cours
+        for v in model.vodes:
+            v.h = torch.zeros((batch_size, *v.h.shape[1:]), device=device)
+            v.u = torch.zeros((batch_size, *v.u.shape[1:]), device=device)
+            
+        model.latent_vode.h = torch.zeros((batch_size, model.latent_dim), device=device)
+        model.latent_vode.u = torch.zeros((batch_size, model.latent_dim), device=device)
+
+        x_label_dummy = torch.zeros((batch_size, model.output_size), device=device)
+        model.vodes[-1].frozen = True
+        model.vodes[0].frozen = False
         
-        scatter = axes[i].scatter(
-            tsne_results[:, 0], tsne_results[:, 1], 
-            c=labels, cmap='tab10', s=15, alpha=0.8
+        model.vodes[-1].h = x
+        model.vodes[0].h = x_label_dummy
+        
+        # 3. Initialisation et Inférence sur le mini-batch
+        model.init_ff(x_label_dummy, x, is_up=True)
+        model.infer(
+            x_label=model.vodes[0].h, y_image=x,
+            T=32, lr_h=0.0019, lr_h_latent=0.0031,
+            alpha_up=1.0, alpha_down=1e-7
         )
-        axes[i].set_title(f"Espace : {name}")
-        axes[i].axis('off')
         
-    handles, _ = scatter.legend_elements(prop="colors")
-    fig.legend(handles, [str(i) for i in range(10)], loc="upper right", title="Classes (0-9)", fontsize=12)
+        # 4. Extraction, passage sur CPU, et stockage (Libère la VRAM)
+        layers_data['Espace Latent 256'].append(model.latent_vode.h.detach().cpu().numpy())
+        layers_data['Vode 1 (Post Conv4)'].append(model.vodes[1].h.flatten(start_dim=1).detach().cpu().numpy())
+        layers_data['Vode 2 (Post Conv3)'].append(model.vodes[2].h.flatten(start_dim=1).detach().cpu().numpy())
+        layers_data['Vode 3 (Post Conv2)'].append(model.vodes[3].h.flatten(start_dim=1).detach().cpu().numpy())
+        layers_data['Vode 4 (Post Conv1)'].append(model.vodes[4].h.flatten(start_dim=1).detach().cpu().numpy())
+        labels_list.append(y.cpu().numpy())
+        
+        samples_collected += batch_size
+
+    # 5. Concaténation finale des tableaux Numpy
+    layers_dict = {k: np.concatenate(v, axis=0) for k, v in layers_data.items()}
+    labels = np.concatenate(labels_list, axis=0)
     
-    os.makedirs("results", exist_ok=True)
+    # 6. Calcul du t-SNE (sur le CPU)
+    from sklearn.manifold import TSNE
+    import matplotlib.pyplot as plt
+    
+    fig, axs = plt.subplots(1, len(layers_dict), figsize=(25, 5))
+    fig.suptitle('Projections t-SNE des Vodes après apprentissage (Single-Population 1D)', fontsize=16)
+
+    for i, (layer_name, features) in enumerate(layers_dict.items()):
+        print(f"Calcul t-SNE pour {layer_name} (Forme: {features.shape})...")
+        tsne = TSNE(n_components=2, random_state=42, init='pca', learning_rate='auto')
+        reduced_features = tsne.fit_transform(features)
+        
+        scatter = axs[i].scatter(reduced_features[:, 0], reduced_features[:, 1], c=labels, cmap='tab10', s=10, alpha=0.7)
+        axs[i].set_title(layer_name)
+        axs[i].axis('off')
+
     plt.tight_layout()
-    plt.savefig("results/tsne_vodes.png", dpi=150)
-    print("Tracés t-SNE sauvegardés avec succès dans 'results/tsne_vodes.png' !")
-    wandb.log({"eval/tsne_layers": wandb.Image(fig, caption="Espace Latent (t-SNE) par couche")}) #[cite: 6]
-    plt.close(fig)
+    plt.savefig("results/tsne_vodes_evolution.png")
+    wandb.log({"eval/tsne_vodes": wandb.Image(plt, caption="t-SNE des Vodes")}) #[cite: 6]
+    plt.close()
+    print("Graphique t-SNE sauvegardé dans 'results/tsne_vodes_evolution.png'.")
 def evaluate_generation(model, device, cf, nm_classes=10):
     print("\n--- Évaluation de la Génération Conditionnelle ---")
     model.eval()
