@@ -161,14 +161,14 @@ def evaluate_generation(model, device, cf, nm_classes=10):
     
     labels = torch.arange(nm_classes, device=device)
     x_label = F.one_hot(labels, num_classes=nm_classes).float()
-    y_image_dummy = torch.zeros((nm_classes, 3, 32, 32), device=device)
+    y_image_dummy = torch.zeros((nm_classes, 3, 32, 32), device=device).requires_grad_(True)
 
     # 1. HARD RESET : On force tout le réseau à la taille nm_classes (10)
     for v in model.vodes:
-        v.h = torch.zeros((nm_classes, *v.h.shape[1:]), device=device)
+        v.h = torch.zeros((nm_classes, *v.h.shape[1:]), device=device).requires_grad_(True)
         v.u = torch.zeros((nm_classes, *v.u.shape[1:]), device=device)
         
-    model.latent_vode.h = torch.zeros((nm_classes, cf.latent_dim), device=device)
+    model.latent_vode.h = torch.zeros((nm_classes, cf.latent_dim), device=device).requires_grad_(True)
     model.latent_vode.u = torch.zeros((nm_classes, cf.latent_dim), device=device)
 
     # 2. Assignation
