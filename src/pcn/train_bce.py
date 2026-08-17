@@ -43,7 +43,7 @@ def train_model(logger, run_config):
     )
 
     # 3: Get architecture that belongs to this dataset
-    architecture = get_architecture_bpc(dataset=datamodule.dataset_name, model_name=run_config["model"], activation=run_config["act_fn"])
+    architecture = get_architecture_bpc(dataset="CIFAR10", model_name=run_config["model"], activation=run_config["act_fn"])
 
     # 4: Initiate model and train it
     datamodule.setup("fit")
