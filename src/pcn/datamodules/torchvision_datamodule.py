@@ -33,7 +33,7 @@ class TorchvisionDataModule(LightningDataModule):
         
         if stage == "fit":
             train_set = self.dataset(
-                root="../data",
+                root="../data_saved/cifar10",
                 train=True,
                 download=True,
                 transform=transform,
@@ -47,7 +47,7 @@ class TorchvisionDataModule(LightningDataModule):
                 self.train_set = torch.utils.data.Subset(train_set, train_indices)
                 self.val_set = torch.utils.data.Subset(
                     self.dataset(
-                        root="../data",
+                        root="../data_saved/cifar10",
                         train=True,
                         download=True,
                         transform=eval_transform,
