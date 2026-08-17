@@ -57,7 +57,7 @@ class TorchvisionDataModule(LightningDataModule):
             else:
                 self.train_set = train_set
                 self.val_set = self.dataset(
-                    root="../data",
+                    root="../data_saved/cifar10",
                     train=False,
                     download=True,
                     transform=eval_transform,
@@ -65,7 +65,7 @@ class TorchvisionDataModule(LightningDataModule):
 
         elif stage == "test" or stage == "predict":
             self.test_set = self.dataset(
-                    root="../data",
+                    root="../data_saved/cifar10",
                     train=False,
                     download=True,
                     transform=eval_transform,
