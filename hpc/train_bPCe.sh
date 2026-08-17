@@ -48,11 +48,6 @@ module load conda/25.9.1
 module load python/3.12.12
 module load cuda-toolkit/12.9.1
 
-# Explication : Activation de votre environnement virtuel ou Conda. (Décommentez la ligne correspondant à votre installation).
-# source /chemin/vers/votre/environnement/venv/bin/activate
-# ou pour conda :
-conda activate torch_env
-
 # ---------------------------------------------------------------------
 # EXÉCUTION DU SCRIPT PYTHON
 # ---------------------------------------------------------------------
@@ -62,11 +57,15 @@ echo "========================================="
 echo "Début du job sur le noeud : $SLURM_NODELIST"
 echo "Date de début : $(date)"
 echo "========================================="
-# Authentification silencieuse pour WandB
-# Explication : Exécution du script d'entraînement. 
-# L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.
-python -u src/pcn/train_bce.py                   
+# 1. On empêche le système SLURM d'interférer avec ses vieux modules
+module purge
 
+# 2. LA CORRECTION C++ : On force Linux à utiliser les librairies de ton environnement Conda
+export LD_LIBRARY_PATH="/home/ppicard/.conda/envs/torch_env/lib:$LD_LIBRARY_PATH"
+
+# 3. L'EXÉCUTION DIRECTE : On ignore complètement la commande "conda" cassée
+# On appelle directement ton Python absolu avec ton script absolu
+/home/ppicard/.conda/envs/torch_env/bin/python -u /home/ppicard/unsupervised-pcn_paul/src/pcn/train_bce.py
 
 # Explication : Trace de fin pour confirmer que le job ne s'est pas coupé en plein milieu.
 echo "========================================="
