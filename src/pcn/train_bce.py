@@ -71,7 +71,7 @@ def train_model(logger, run_config):
 
     # 5: Test results
     trainer.test(pc, datamodule=datamodule)
-
+    torch.save(pc.state_dict(), f"models/bpc_eo{run_config['e_lr']}.pt")
     # 6: Release all CUDA memory that you can
     pc = None
     trainer = None
@@ -100,15 +100,15 @@ if __name__ == "__main__":
         "nm_epochs": 25,
         "iters": 5,
         "e_lr": 0.001,
-        "w_lr": 0.0002684922681018005,
-        "w_decay": 0.00000922776551566587,
+        "w_lr": 0.0004708376358797,
+        "w_decay": 0.00001478307651456393,
         "output_loss_scale": 1.0,
         "model": "VGG5",    
         "act_fn": "gelu",
         "dataset": "CIFAR10",
         "is_test": False,   
         "alpha_up": 1.0,
-        "alpha_down": 1e-8,   
+        "alpha_down": 1e-5,   
         "load_path": None, #"checkpoints/tiny-imagenet-VGG16-24-69.69163.ckpt", #"checkpoints/CIFAR10-VGG5-23-23.24405.ckpt",  # if not None, load weights from this path     
         "save_checkpoints": False,
     }
