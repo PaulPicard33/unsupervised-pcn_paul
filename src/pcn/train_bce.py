@@ -25,7 +25,7 @@ def train_model(logger, run_config):
     # 1: load dataset as Lightning DataModule
     batch_size = run_config["batch_size"]
     if run_config["dataset"] == "CIFAR10":
-        datamodule = get_CIFAR10_dataloaders(batch_size, is_test=run_config["is_test"])
+        datamodule = get_CIFAR10_dataloaders(batch_size=batch_size)
     
 
     # 2: Setup trainer
