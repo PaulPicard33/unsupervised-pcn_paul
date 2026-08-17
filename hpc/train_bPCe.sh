@@ -62,6 +62,9 @@ module purge
 
 # 2. LA CORRECTION C++ : On force Linux à utiliser les librairies de ton environnement Conda
 export LD_LIBRARY_PATH="/home/ppicard/.conda/envs/torch_env/lib:$LD_LIBRARY_PATH"
+# ── LA CORRECTION VRAM : On interdit formellement la pré-allocation XLA/JAX ──
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+export XLA_PYTHON_CLIENT_ALLOCATOR=platform
 
 # 3. L'EXÉCUTION DIRECTE : On ignore complètement la commande "conda" cassée
 # On appelle directement ton Python absolu avec ton script absolu
