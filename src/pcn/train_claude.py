@@ -90,7 +90,7 @@ class bPC_VGG(nn.Module):
         self.latent_dim  = latent_dim
         self.output_size = output_size
         self.latent_var  = latent_var  # variance du prior sur le latent
-
+        self.eval_mode    = False  # True pendant l'évaluation pour figer les vodes
         # ── Pipeline UP (image → label) ──────────────────────────────────────
         self.conv1 = nn.Conv2d(input_channels, 128, kernel_size=3, padding=1, stride=1)
         self.pool1 = nn.MaxPool2d(2, 2)      # 28→14
@@ -155,6 +155,10 @@ class bPC_VGG(nn.Module):
             v.to(device)
         self.latent_vode.to(device)
         return self
+    def eval(self,**kwargs):
+        super().eval(**kwargs)
+        self.eval_mode = True
+
 
     # ── Énergie du vode latent ────────────────────────────────────────────────
 
@@ -321,7 +325,9 @@ class bPC_VGG(nn.Module):
             # Sécurité contre les falaises d'énergie
             optimizer_h.step()
             optimizer_h_latent.step()
-
+            if self.eval_mode:
+                if not self.vodes[-1].frozen:
+                    self.vodes[-1].h.data.clamp_(-1.0, 1.0) # Ajuste à [0, 1] si tu n'utilises pas la normalisation -1/1
             
         # Détacher proprement avant le W-step
         for v in self.vodes:
