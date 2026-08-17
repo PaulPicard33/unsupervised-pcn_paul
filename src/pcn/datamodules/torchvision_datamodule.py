@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader
 class TorchvisionDataModule(LightningDataModule):
     """Abstract class to easily turn a torchvision dataset into a Lightning DataModule"""
 
-    prediction_callback = ImageLabelVisualizationCallback
     known_shapes: dict[str, tuple[int, ...]]
     transforms: list[v2.Transform]
     dataset: type = torchvision.datasets.VisionDataset
