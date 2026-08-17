@@ -5,6 +5,7 @@ import torch
 import bpc_e
 import wandb 
 
+from datamodules import CIFAR10, CIFAR100, TinyImageNet
 from pcn.datasets import get_CIFAR10_dataloaders
 from get_arch import get_architecture_bpc
 
@@ -25,7 +26,7 @@ def train_model(logger, run_config):
     # 1: load dataset as Lightning DataModule
     batch_size = run_config["batch_size"]
     if run_config["dataset"] == "CIFAR10":
-        datamodule = get_CIFAR10_dataloaders(batch_size=batch_size)
+        datamodule = CIFAR10(batch_size, is_test=run_config["is_test"]) 
     
 
     # 2: Setup trainer
@@ -102,10 +103,10 @@ if __name__ == "__main__":
         "w_lr": 0.0002684922681018005,
         "w_decay": 0.00000922776551566587,
         "output_loss_scale": 1.0,
-        "model": "VGG5",
+        "model": "VGG5",    
         "act_fn": "gelu",
         "dataset": "CIFAR10",
-        "is_test": False,
+        "is_test": False,   
         "alpha_up": 1.0,
         "alpha_down": 1e-8,   
         "load_path": None, #"checkpoints/tiny-imagenet-VGG16-24-69.69163.ckpt", #"checkpoints/CIFAR10-VGG5-23-23.24405.ckpt",  # if not None, load weights from this path     
