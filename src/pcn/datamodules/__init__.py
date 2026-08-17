@@ -43,7 +43,7 @@ class CIFAR10(TorchvisionDataModule):
     ]
     dataset = torchvision.datasets.CIFAR10
     # dl_kwargs = {"num_workers": 0, "pin_memory": False, "persistent_workers": False}
-    dl_kwargs = {"num_workers": 8, "pin_memory": True, "persistent_workers": True}
+    dl_kwargs = {"num_workers": 4, "pin_memory": True, "persistent_workers": True}
 
 
 class CIFAR100(TorchvisionDataModule):
