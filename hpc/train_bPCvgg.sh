@@ -62,6 +62,14 @@ echo "========================================="
 echo "Début du job sur le noeud : $SLURM_NODELIST"
 echo "Date de début : $(date)"
 echo "========================================="
+module purge
+
+# 2. LA CORRECTION C++ : On force Linux à utiliser les librairies de ton environnement Conda
+export LD_LIBRARY_PATH="/home/ppicard/.conda/envs/torch_env/lib:$LD_LIBRARY_PATH"
+# ── LA CORRECTION VRAM : On interdit formellement la pré-allocation XLA/JAX ──
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+export XLA_PYTHON_CLIENT_ALLOCATOR=platform
+export TF_FORCE_GPU_ALLOW_GROWTH=true
 # Authentification silencieuse pour WandB
 # Explication : Exécution du script d'entraînement. 
 # L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.
