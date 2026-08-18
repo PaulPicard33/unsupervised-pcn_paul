@@ -1,3 +1,9 @@
+import os
+# Force XLA/JAX à ne pas pré-allouer 90% de la VRAM
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
