@@ -207,7 +207,7 @@ def evaluate_reconstruction(model, dataloader, device, cf):
     print("\n--- Évaluation de la Reconstruction (MSE) ---")
     mse_total = 0.0
     total_images = 0
-    
+    Images= []
     for x_images, _ in dataloader:
         x_images = x_images.to(device)
         batch_size = x_images.size(0)
@@ -241,19 +241,22 @@ def evaluate_reconstruction(model, dataloader, device, cf):
         model.infer(
             x_label=inferred_label, y_image=dummy_reconstruction,
             T=cf.infer_steps_eval, lr_h=cf.lr_x_eval, lr_h_latent=0.0, # Latent figé
-            alpha_up=cf.alpha_disc, alpha_down=cf.alpha_gen
+            alpha_up=cf.alpha_disc, alpha_down=cf.alpha_disc
         )
         
         reconstructed_images = model.vodes[-1].h.detach()
+        Images.append(reconstructed_images.cpu().numpy())
         mse_total += F.mse_loss(reconstructed_images, x_images, reduction='sum').item()
         total_images += batch_size
         
         # Rétablir les états
         model.latent_vode.frozen = False
-        
+    fig,ax = plt.subplots(figsize=(10, 10))
+    ax.imshow(np.concatenate(Images, axis=0))
     mse_final = mse_total / (total_images * 3 * 32 * 32)
     print(f"MSE de reconstruction latente : {mse_final:.5f}")
     wandb.log({"eval/reconstruction_mse": mse_final}) #[cite: 6]
+    wandb.log({"eval/reconstruction_images": wandb.Image(plt, caption="Reconstruction d'Images")}) #[cite: 6]
     return mse_final
 class LinearProbe(nn.Module):
     def __init__(self, rep_size, n_classes):
@@ -370,7 +373,7 @@ def main(cf):
 
     # 1. Évaluation de l'accuracy
     evaluate_generation(bpc_model, device, cf)
-    """ evaluate_discrimination(bpc_model, val_loader, device, cf)
+    evaluate_discrimination(bpc_model, val_loader, device, cf)
     evaluate_reconstruction(bpc_model, val_loader, device, cf)
     evaluate_linear_probing(bpc_model, val_loader, device, cf)
     
@@ -382,7 +385,7 @@ def main(cf):
         tsne_dataset = get_CIFAR10_dataloaders(batch_size=1000, subset_size=1000)
         
     torch.cuda.empty_cache()
-    plot_tsne_layers(bpc_model, tsne_dataset["val"], device) """
+    plot_tsne_layers(bpc_model, tsne_dataset["val"], device)
     wandb.finish()  # Clôture de la session WandB
 
 if __name__ == "__main__":
