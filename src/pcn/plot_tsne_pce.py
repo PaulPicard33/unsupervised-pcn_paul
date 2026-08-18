@@ -1,0 +1,126 @@
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+
+# Importations spécifiques à ton projet
+from bpc_e import PCE, PC_States, PCESkipConnection
+from datamodules import CIFAR10 # Remplace si tu utilises CIFAR100 ou TinyImageNet
+from get_arch import get_architecture_bpc
+
+def extract_and_plot_tsne(model, dataloader, device, num_samples=1000, save_path="results/tsne_pce_layers.png"):
+    print(f"\n--- Extraction des représentations ({num_samples} images) ---")
+    model.eval()
+    model.to(device)
+    
+    # Récupération du nombre de couches montantes
+    num_layers = len(model.layers_up)
+    layers_data = {f"Couche_UP_{i+1}": [] for i in range(num_layers)}
+    labels_list = []
+    
+    samples_collected = 0
+
+    # 1. Extraction par mini-batchs (Protection Anti-OOM)
+    for x, y in dataloader:
+        if samples_collected >= num_samples:
+            break
+            
+        batch_size = x.size(0)
+        # Couper le batch si on dépasse num_samples
+        if samples_collected + batch_size > num_samples:
+            x = x[:num_samples - samples_collected]
+            y = y[:num_samples - samples_collected]
+            batch_size = x.size(0)
+            
+        x = x.to(device)
+        
+        with torch.no_grad():
+            # Passe Feedforward manuelle pour capturer chaque état intermédiaire
+            current_state = x
+            for i, layer in enumerate(model.layers_up):
+                current_state = layer(current_state)
+                # On aplatit le tenseur (start_dim=1) et on l'envoie direct sur le CPU
+                layers_data[f"Couche_UP_{i+1}"].append(current_state.flatten(start_dim=1).cpu().numpy())
+                
+        labels_list.append(y.cpu().numpy())
+        samples_collected += batch_size
+
+    # 2. Concaténation des listes en gros tableaux Numpy
+    print("--- Concaténation des données ---")
+    layers_dict = {k: np.concatenate(v, axis=0) for k, v in layers_data.items()}
+    labels = np.concatenate(labels_list, axis=0)
+    
+    # 3. Calcul du t-SNE et affichage (Totalement sur CPU)
+    print("--- Calcul des projections t-SNE (Cela peut prendre quelques minutes) ---")
+    fig, axs = plt.subplots(1, num_layers, figsize=(5 * num_layers, 5))
+    
+    # Sécurité si une seule couche
+    if num_layers == 1:
+        axs = [axs]
+        
+    fig.suptitle("Évolution des Représentations (Passe Montante PCE)", fontsize=16)
+
+    for i, (layer_name, features) in enumerate(layers_dict.items()):
+        print(f"Calcul t-SNE pour {layer_name} (Dimensions: {features.shape})...")
+        # Paramétrage standard robuste pour le t-SNE
+        tsne = TSNE(n_components=2, random_state=42, init='pca', learning_rate='auto')
+        reduced_features = tsne.fit_transform(features)
+        
+        scatter = axs[i].scatter(
+            reduced_features[:, 0], reduced_features[:, 1], 
+            c=labels, cmap='tab10', s=10, alpha=0.7
+        )
+        axs[i].set_title(layer_name)
+        axs[i].axis('off')
+
+    plt.tight_layout()
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    print(f"\nSuccès ! Graphique t-SNE sauvegardé sous : {save_path}")
+
+if __name__ == "__main__":
+    # --- Configuration ---
+    # Aligne ces paramètres avec ceux qui ont servi à générer ton .pt
+    DATASET_NAME = "CIFAR10"
+    MODEL_NAME = "VGG5"
+    ACT_FN = "gelu"
+    BATCH_SIZE = 256
+    WEIGHTS_PATH = "models/bpc_eo0.001.pt" # Modifie avec ton chemin
+    OPTIM_MODE = "errors" # "errors" (PCE), "states" (PC_States), ou "skip" (PCESkipConnection)
+    NUM_IMAGES_TSNE = 1000
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Appareil détecté : {device}")
+
+    # 1. Chargement des données
+    datamodule = CIFAR10(BATCH_SIZE, is_test=False) # Remplacer par la bonne classe si besoin
+    datamodule.setup("test")
+    val_loader = datamodule.val_dataloader() # On utilise le set de validation pour le t-SNE
+
+    # 2. Instanciation de l'architecture
+    architecture = get_architecture_bpc(dataset=DATASET_NAME, model_name=MODEL_NAME, activation=ACT_FN)
+    
+    # 3. Sélection dynamique de la classe
+    if OPTIM_MODE == "states":
+        ModelClass = PC_States
+    elif OPTIM_MODE == "skip":
+        ModelClass = PCESkipConnection
+    else:
+        ModelClass = PCE
+
+    # Initialisation du module Lightning[cite: 1, 2]
+    model = ModelClass(
+        architecture=architecture,
+        iters=5, e_lr=0.001, w_lr=0.0002, alpha_up=1.0, alpha_down=1e-8 # Paramètres dummy pour l'eval
+    )
+    
+    # 4. Chargement des poids depuis le .pt
+    # (Si c'est un state_dict brut PyTorch)
+    state_dict = torch.load(WEIGHTS_PATH, map_location=device, weights_only=True)
+    
+    # Si le fichier .pt contient des clés avec un préfixe inattendu (ex: 'model.layers...'), 
+    # le paramètre strict=False évite les crashs bloquants
+    model.load_state_dict(state_dict, strict=False) 
+    
+    # Lancement du plot
+    extract_and_plot_tsne(model, val_loader, device, num_samples=NUM_IMAGES_TSNE)
