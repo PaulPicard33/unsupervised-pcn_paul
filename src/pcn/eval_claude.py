@@ -169,7 +169,7 @@ def evaluate_generation(model, device, cf, nm_classes=10):
         v.u = torch.zeros((nm_classes, *v.u.shape[1:]), device=device)
         
     model.latent_vode.h = (torch.randn((nm_classes, cf.latent_dim), device=device)*0.1).requires_grad_(True)
-    model.latent_vode.u = torch.randn((nm_classes, cf.latent_dim), device=device)
+    model.latent_vode.u = torch.zeros((nm_classes, cf.latent_dim), device=device)
 
     # 2. Assignation
     model.vodes[0].h = x_label
@@ -183,10 +183,10 @@ def evaluate_generation(model, device, cf, nm_classes=10):
     model.infer(
         x_label=x_label, 
         y_image=y_image_dummy,
-        T=5*cf.infer_steps_eval,
+        T=2*cf.infer_steps_eval,
         lr_h=cf.lr_x_eval,
         lr_h_latent=cf.lr_x_latent,
-        alpha_up=cf.alpha_disc,
+        alpha_up=0.0,
         alpha_down=1.0  # <--- CHANGEMENT CRITIQUE : Remplace cf.alpha_gen pour libérer les pixels
     )
     
