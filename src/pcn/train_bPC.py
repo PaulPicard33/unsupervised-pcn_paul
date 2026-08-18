@@ -112,14 +112,26 @@ class bPC_VGG(nn.Module):
         self.unified_up = UnifiedUp(self.flatten_size, output_size, latent_dim)
         self.unified_down = UnifiedDown(output_size, latent_dim, self.flatten_size)
 
-        # ── Pipeline DOWN (label → image) ─────────────────────────────────────
-        # combination_fn_pre : fc_down(label) + latent_layer_down(latent) → vode[2]
-        # Autrement dit : fc_down prend le label, latent_layer_down injecte le latent,
-        # et leur somme entre dans relu → reshape → deconvolutions.
-        self.deconv4 = nn.ConvTranspose2d(512, 512, kernel_size=3, padding=1, stride=2, output_padding=1)  # 1→3
-        self.deconv3 = nn.ConvTranspose2d(512, 256, kernel_size=3, padding=1, stride=2, output_padding=1)  # 3→7
-        self.deconv2 = nn.ConvTranspose2d(256, 128, kernel_size=3, padding=1, stride=2, output_padding=1)  # 7→14
-        self.deconv1 = nn.ConvTranspose2d(128, input_channels, kernel_size=3, padding=1, stride=2, output_padding=1)  # 14→28
+        # On remplace les ConvTranspose2d par des blocs Resize + Conv2d
+        # Note : on conserve les mêmes dimensions de canaux pour correspondre à tes Vodes
+        self.up_sample = nn.Upsample(scale_factor=2, mode='nearest')
+
+        self.deconv4 = nn.Sequential(
+            self.up_sample,
+            nn.Conv2d(512, 512, kernel_size=3, padding=1, stride=1)
+        )
+        self.deconv3 = nn.Sequential(
+            self.up_sample,
+            nn.Conv2d(512, 256, kernel_size=3, padding=1, stride=1)
+        )
+        self.deconv2 = nn.Sequential(
+            self.up_sample,
+            nn.Conv2d(256, 128, kernel_size=3, padding=1, stride=1)
+        )
+        self.deconv1 = nn.Sequential(
+            self.up_sample,
+            nn.Conv2d(128, input_channels, kernel_size=3, padding=1, stride=1)
+        )
 
         self.act          = nn.GELU()
         self.out_act_down = nn.Tanh()

@@ -69,7 +69,7 @@ export TF_FORCE_GPU_ALLOW_GROWTH=true
 
 # 3. L'EXÉCUTION DIRECTE : On ignore complètement la commande "conda" cassée
 # On appelle directement ton Python absolu avec ton script absolu
-/home/ppicard/.conda/envs/torch_env/bin/python -u /home/ppicard/unsupervised-pcn_paul/src/pcn/plot_tsne_pce.py
+/home/ppicard/.conda/envs/torch_env/bin/python -u /home/ppicard/unsupervised-pcn_paul/src/pcn/plot_tsne_bPC_EO.py
 
 # Explication : Trace de fin pour confirmer que le job ne s'est pas coupé en plein milieu.
 echo "========================================="
