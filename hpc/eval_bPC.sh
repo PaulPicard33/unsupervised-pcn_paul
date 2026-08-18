@@ -70,9 +70,8 @@ export LD_LIBRARY_PATH="/home/ppicard/.conda/envs/torch_env/lib:$LD_LIBRARY_PATH
 
 # 3. LE BOUCLIER VRAM (Indispensable car eval_claude.py importe les datamodules)
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
-export JAX_PLATFORM_NAME=cpu
+export XLA_PYTHON_CLIENT_ALLOCATOR=platform
 export TF_FORCE_GPU_ALLOW_GROWTH=true
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # Explication : Exécution du script d'entraînement. 
 # L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.
 python -u src/pcn/eval_claude.py --model_path models/bpc-CIFAR10-T=32-ep=50.pt
