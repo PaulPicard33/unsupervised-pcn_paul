@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+import wandb
 
 # Importations spécifiques à ton projet
 from bpc_e import PCE, PC_States, PCESkipConnection
@@ -75,6 +76,7 @@ def extract_and_plot_tsne(model, dataloader, device, num_samples=1000, save_path
 
     plt.tight_layout()
     plt.savefig(save_path, bbox_inches='tight')
+    wandb.log({"t-SNE Plot": wandb.Image(save_path)})  # Log vers Weights & Biases
     plt.close()
     print(f"\nSuccès ! Graphique t-SNE sauvegardé sous : {save_path}")
 
@@ -88,14 +90,14 @@ if __name__ == "__main__":
     WEIGHTS_PATH = "models/bpc_eo0.001.pt" # Modifie avec ton chemin
     OPTIM_MODE = "errors" # "errors" (PCE), "states" (PC_States), ou "skip" (PCESkipConnection)
     NUM_IMAGES_TSNE = 1000
-    
+    wandb.init(project="unsupervised-pcn", name=f"t-SNE_{MODEL_NAME}_{DATASET_NAME}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Appareil détecté : {device}")
 
     # 1. Chargement des données
     datamodule = CIFAR10(BATCH_SIZE, is_test=False) # Remplacer par la bonne classe si besoin
     datamodule.setup("test")
-    val_loader = datamodule.val_dataloader() # On utilise le set de validation pour le t-SNE
+    val_loader = datamodule.test_dataloader() # On utilise le set de validation pour le t-SNE
 
     # 2. Instanciation de l'architecture
     architecture = get_architecture_bpc(dataset=DATASET_NAME, model_name=MODEL_NAME, activation=ACT_FN)
@@ -124,3 +126,4 @@ if __name__ == "__main__":
     
     # Lancement du plot
     extract_and_plot_tsne(model, val_loader, device, num_samples=NUM_IMAGES_TSNE)
+    wandb.finish()
