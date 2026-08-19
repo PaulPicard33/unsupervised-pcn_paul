@@ -4,7 +4,6 @@
 # ---------------------------------------------------------------------
 # DIRECTIVES SLURM (Paramétrage des ressources du cluster HPC)
 # ---------------------------------------------------------------------
-#SBATCH --exclusive 
 #SBATCH --job-name=bPC_train
 # Explication : Donne un nom à votre job pour le repérer facilement dans la file d'attente (via la commande 'squeue').
 
