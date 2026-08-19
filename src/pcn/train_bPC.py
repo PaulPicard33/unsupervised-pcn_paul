@@ -99,13 +99,13 @@ class bPC_VGG(nn.Module):
         self.eval_mode    = False  # True pendant l'évaluation pour figer les vodes
         # ── Pipeline UP (image → label) ──────────────────────────────────────
         self.conv1 = nn.Conv2d(input_channels, 128, kernel_size=3, padding=1, stride=1)
-        self.pool1 = nn.MaxPool2d(2, 2)      # 28→14
+        self.pool1 = nn.AvgPool2d(2, 2)      # 28→14
         self.conv2 = nn.Conv2d(128, 256, kernel_size=3, padding=1, stride=1)
-        self.pool2 = nn.MaxPool2d(2, 2)      # 14→7
+        self.pool2 = nn.AvgPool2d(2, 2)      # 14→7
         self.conv3 = nn.Conv2d(256, 512, kernel_size=3, padding=1, stride=1)
-        self.pool3 = nn.MaxPool2d(2, 2)      # 7→3
+        self.pool3 = nn.AvgPool2d(2, 2)      # 7→3
         self.conv4 = nn.Conv2d(512, 512, kernel_size=3, padding=1, stride=1)
-        self.pool4 = nn.MaxPool2d(2, 2)      # 3→1
+        self.pool4 = nn.AvgPool2d(2, 2)      # 3→1
         # flatten_size = 512 * 1 * 1 = 512
         # Dans __init__, après les définitions de pool :
         h, w = input_size
