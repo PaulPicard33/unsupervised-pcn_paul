@@ -4,7 +4,6 @@
 # ---------------------------------------------------------------------
 # DIRECTIVES SLURM (Paramétrage des ressources du cluster HPC)
 # ---------------------------------------------------------------------
-
 #SBATCH --exclusive 
 #SBATCH --job-name=bPC_train
 # Explication : Donne un nom à votre job pour le repérer facilement dans la file d'attente (via la commande 'squeue').
@@ -71,7 +70,6 @@ export LD_LIBRARY_PATH="/home/ppicard/.conda/envs/torch_env/lib:$LD_LIBRARY_PATH
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 export XLA_PYTHON_CLIENT_ALLOCATOR=platform
 export TF_FORCE_GPU_ALLOW_GROWTH=true
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments=true
 # Authentification silencieuse pour WandB
 # Explication : Exécution du script d'entraînement. 
 # L'option '-u' (unbuffered) est cruciale sur HPC : elle permet d'écrire les 'print' instantanément dans le fichier log au lieu d'attendre la fin de l'exécution.

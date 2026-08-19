@@ -83,6 +83,8 @@ rsync -avz --exclude='logs' plafrim:/beegfs/lfontain/unsupervised-pcn/outputs/ ~
 ```
 The first two lines are used to only have to enter the passphrase once to copy files from PLaFRIM, using a SSH-Agent. The last line synchronizes the outputs directory on PLaFRIM except the logs folder with the outputs directory of the local machine. In order to use rsync, install it using the installation script provided [here](https://scicomp.aalto.fi/scicomp/rsynconwindows/) (if you are on Windows). 
 
+## Important check for the bPC files 
+In all these files it is assumed that you have already connected your wandb account via the terminal in the distant node of Plafri. If you have not done so yet just add: wandb.login(YOUR_API_KEY)
 
 ## Useful tips for PLaFRIM
 * Check available modules
