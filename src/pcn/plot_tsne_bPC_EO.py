@@ -185,7 +185,7 @@ if __name__ == "__main__":
     # 1. Chargement des données
     datamodule = CIFAR10(BATCH_SIZE, is_test=False) # Remplacer par la bonne classe si besoin
     datamodule.setup("test")
-    val_loader = datamodule.test_édataloader() # On utilise le set de validation pour le t-SNE
+    val_loader = datamodule.test_dataloader() # On utilise le set de validation pour le t-SNE
 
     # 2. Instanciation de l'architecture
     architecture = get_architecture_bpc(dataset=DATASET_NAME, model_name=MODEL_NAME, activation=ACT_FN)
