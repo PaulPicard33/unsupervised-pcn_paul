@@ -135,7 +135,7 @@ def generate_and_plot_classes(model, device, num_classes=10, img_shape=(3, 32, 3
     for param_group in optimizer.param_groups:
         param_group['lr'] = 0.01  # Réduction du pas pour le fignolage
         
-    print("Phase 2 : Harmonisation bidirectionnelle (T=500)...")
+    """ print("Phase 2 : Harmonisation bidirectionnelle (T=500)...")
     for _ in range(500):
         optimizer.zero_grad()
         E = model.E(x_gen, y_target)
@@ -143,7 +143,7 @@ def generate_and_plot_classes(model, device, num_classes=10, img_shape=(3, 32, 3
         optimizer.step()
         
         with torch.no_grad():
-            x_gen.clamp_(-1.0, 1.0)
+            x_gen.clamp_(-1.0, 1.0) """
             
     # Rétablir les gradients des paramètres pour ne pas bloquer les fonctions suivantes
     for p in model.parameters():
@@ -154,7 +154,6 @@ def generate_and_plot_classes(model, device, num_classes=10, img_shape=(3, 32, 3
     
     # Dé-normalisation pour l'affichage (si tes images sont entraînées entre -1 et 1)
     imgs_to_plot = (x_gen.detach().clone() + 1) / 2.0 
-    imgs_to_plot = imgs_to_plot.clamp(0, 1)
     
     grid = vutils.make_grid(imgs_to_plot, nrow=5, padding=2, normalize=False)
     
