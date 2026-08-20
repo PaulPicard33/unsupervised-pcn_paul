@@ -240,6 +240,13 @@ class bPC_VGG(nn.Module):
                 # --- LA CORRECTION : Calcul de l'image ---
                 z_img = self.out_act_down(self.deconv1(z))
                 self.vodes[-1].h = z_img.clone()
+    def compute_tv_energy(self, x):
+        """Calcule l'énergie de Variation Totale pour un tenseur 4D (B, C, H, W)."""
+        # Différence sur l'axe de la hauteur (H)
+        diff_h = torch.sum((x[:, :, 1:, :] - x[:, :, :-1, :]) ** 2)
+        # Différence sur l'axe de la largeur (W)
+        diff_w = torch.sum((x[:, :, :, 1:] - x[:, :, :, :-1]) ** 2)
+        return diff_h + diff_w  
 
     # ── Calcul d'énergie bPC ──────────────────────────────────────────────────
 
@@ -287,6 +294,19 @@ class bPC_VGG(nn.Module):
         e_down += 0.5 * ((self.vodes[-1].h - u_down_img) ** 2).sum() 
         
         e_down += 0.5 * ((self.latent_vode.h - 0.0) ** 2).sum() / 1.0
+
+        # ── AJOUT DU PRIOR DE LISSAGE (TV ENERGY) ──
+        # Ce paramètre lambda_tv dicte la force du lissage (à ajuster, typiquement 1e-3 à 1e-4)
+        lambda_tv = 1e-3 
+        e_tv = 0.0
+        
+        # On lisse l'image (vode[-1]) et la couche de plus haute résolution spatiale (vode[4])
+        if self.vodes[-1].h.requires_grad: 
+            e_tv += self.compute_tv_energy(self.vodes[-1].h)
+        if self.vodes[4].h.requires_grad:
+            e_tv += self.compute_tv_energy(self.vodes[4].h)
+            
+        e_down += lambda_tv * e_tv
 
         if weighted:
             return alpha_up * e_up + alpha_down * e_down
