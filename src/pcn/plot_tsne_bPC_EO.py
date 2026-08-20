@@ -79,6 +79,95 @@ def extract_and_plot_tsne(model, dataloader, device, num_samples=1000, save_path
     wandb.log({"t-SNE Plot": wandb.Image(save_path)})  # Log vers Weights & Biases
     plt.close()
     print(f"\nSuccès ! Graphique t-SNE sauvegardé sous : {save_path}")
+import torchvision.utils as vutils
+
+def generate_and_plot_classes(model, device, num_classes=10, img_shape=(3, 32, 32), save_path="results/generated_classes.png"):
+    """
+    Génère une image à partir de zéro pour chaque classe (0 à 9) en minimisant
+    l'énergie du réseau selon la méthode PCE (optimisation des erreurs).
+    """
+    print(f"\n--- Génération des images par classe ({num_classes} classes) ---")
+    model.eval()
+    
+    # 1. Préparation des cibles (y) : matrice identité pour du one-hot encoding
+    # (Adapte si tes labels y dans bpc_e sont formatés différemment)
+    y_target = torch.eye(num_classes).to(device)
+    
+    # 2. Initialisation de la "toile vierge" (x) avec un léger bruit pour briser la symétrie
+    x_gen = (torch.randn((num_classes, *img_shape), device=device) * 0.1).requires_grad_(True)
+    
+    # On fige les poids du modèle (inférence uniquement)
+    for p in model.parameters():
+        p.requires_grad_(False)
+        
+    # 3. Initialisation des erreurs via la fonction interne de bpc_e
+    model.init_zero_errors(x_gen)
+    
+    # 4. Configuration de l'optimiseur
+    # On optimise simultanément les pixels de l'image ET les erreurs latentes
+    optimizer = torch.optim.Adam([x_gen] + model.errors, lr=0.05)
+    
+    # Sauvegarde des alphas d'origine pour la phase 2
+    orig_alpha_up = model.alpha_up
+    orig_alpha_down = model.alpha_down
+    
+    # --- PHASE 1 : Voie descendante stricte ---
+    # On force le label à écraser le bruit de l'image (dictature du label)
+    model.alpha_up = 0.0
+    model.alpha_down = 1.0
+    
+    print("Phase 1 : Inférence descendante (T=1000)...")
+    for _ in range(1000):
+        optimizer.zero_grad()
+        E = model.E(x_gen, y_target)
+        E.backward()
+        optimizer.step()
+        
+        # Borner l'image pour rester dans l'espace colorimétrique valide
+        with torch.no_grad():
+            x_gen.clamp_(-1.0, 1.0)
+            
+    # --- PHASE 2 : Relaxation et harmonisation ---
+    # On réactive la voie montante pour lisser et affiner les détails
+    model.alpha_up = orig_alpha_up
+    model.alpha_down = orig_alpha_down
+    
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = 0.01  # Réduction du pas pour le fignolage
+        
+    print("Phase 2 : Harmonisation bidirectionnelle (T=500)...")
+    for _ in range(500):
+        optimizer.zero_grad()
+        E = model.E(x_gen, y_target)
+        E.backward()
+        optimizer.step()
+        
+        with torch.no_grad():
+            x_gen.clamp_(-1.0, 1.0)
+            
+    # Rétablir les gradients des paramètres pour ne pas bloquer les fonctions suivantes
+    for p in model.parameters():
+        p.requires_grad_(True)
+        
+    # 5. Affichage et sauvegarde
+    print(f"Sauvegarde des images générées sous : {save_path}")
+    
+    # Dé-normalisation pour l'affichage (si tes images sont entraînées entre -1 et 1)
+    imgs_to_plot = (x_gen.detach().clone() + 1) / 2.0 
+    imgs_to_plot = imgs_to_plot.clamp(0, 1)
+    
+    grid = vutils.make_grid(imgs_to_plot, nrow=5, padding=2, normalize=False)
+    
+    plt.figure(figsize=(10, 4))
+    plt.imshow(grid.permute(1, 2, 0).cpu().numpy())
+    plt.title("Génération par Inférence d'Énergie (PCE)")
+    plt.axis('off')
+    plt.tight_layout()
+    plt.savefig(save_path, bbox_inches='tight', dpi=150)
+    wandb.log({"Generated Classes": wandb.Image(save_path)})  # Log vers Weights & Biases
+    plt.close()
+    
+    return x_gen.detach()
 
 if __name__ == "__main__":
     # --- Configuration ---
@@ -97,7 +186,7 @@ if __name__ == "__main__":
     # 1. Chargement des données
     datamodule = CIFAR10(BATCH_SIZE, is_test=False) # Remplacer par la bonne classe si besoin
     datamodule.setup("test")
-    val_loader = datamodule.test_dataloader() # On utilise le set de validation pour le t-SNE
+    val_loader = datamodule.test_édataloader() # On utilise le set de validation pour le t-SNE
 
     # 2. Instanciation de l'architecture
     architecture = get_architecture_bpc(dataset=DATASET_NAME, model_name=MODEL_NAME, activation=ACT_FN)
@@ -126,4 +215,12 @@ if __name__ == "__main__":
     
     # Lancement du plot
     extract_and_plot_tsne(model, val_loader, device, num_samples=NUM_IMAGES_TSNE)
+    # 2. Génération des images par classe
+    generate_and_plot_classes(
+        model=model, 
+        device=device, 
+        num_classes=10, 
+        img_shape=(3, 32, 32), # Ajuste si tu passes sur TinyImageNet (3, 64, 64)
+        save_path="results/generated_classes_pce.png"
+    )
     wandb.finish()
